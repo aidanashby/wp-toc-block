@@ -371,13 +371,13 @@ require_once __DIR__ . '/toc-pure-functions.php';
  * descendant of it as skip — used by the buffer fallback to keep header/
  * nav/footer/sidebar headings out of the list.
  *
- * @param string       $html
- * @param array        $levels
- * @param DOMDocument  &$dom_out   Set to the parsed DOMDocument, so callers
- *                                 needing scope detection can reuse it.
- * @return array
+ * @param string $html
+ * @param array  $levels
+ * @return array [ $flat_all, $dom ] — $dom is the parsed DOMDocument, so
+ *               callers needing scope detection (the buffer fallback) can
+ *               reuse it instead of parsing twice.
  */
-function wp_toc_scan_headings( $html, array $levels, ?DOMDocument &$dom_out = null ) {
+function wp_toc_scan_headings( $html, array $levels ) {
 	$tags = array_map(
 		function ( $l ) {
 			return 'h' . $l;
@@ -397,7 +397,6 @@ function wp_toc_scan_headings( $html, array $levels, ?DOMDocument &$dom_out = nu
 	// NOIMPLIED/NODEFDTD stop libxml wrapping the fragment in <html><body>.
 	$dom->loadHTML( '<?xml encoding="utf-8" ?>' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD );
 	libxml_clear_errors();
-	$dom_out = $dom;
 
 	$xpath    = new DOMXPath( $dom );
 	$query    = '//' . implode( '|//', $tags );
@@ -432,7 +431,7 @@ function wp_toc_scan_headings( $html, array $levels, ?DOMDocument &$dom_out = nu
 	}
 	unset( $item );
 
-	return $flat_all;
+	return array( $flat_all, $dom );
 }
 
 /**
@@ -509,10 +508,9 @@ function wp_toc_process_content( $content ) {
 		return str_replace( WP_TOC_PLACEHOLDER, '', $content );
 	}
 
-	$levels             = $settings['heading_levels'];
-	$dom                = null;
-	$flat_all           = wp_toc_scan_headings( $content, $levels, $dom );
-	$processed_post_id  = get_the_ID();
+	$levels            = $settings['heading_levels'];
+	list( $flat_all )  = wp_toc_scan_headings( $content, $levels );
+	$processed_post_id = get_the_ID();
 
 	return wp_toc_finish( $content, $levels, $flat_all, $settings );
 }
@@ -609,7 +607,41 @@ function wp_toc_append_debug( $html, array $data ) {
  * @param string $buffer
  * @return string
  */
+/**
+ * Modifying the entire page's output in one pass carries a bigger blast
+ * radius than a normal content filter: a bug here can take down the whole
+ * page, not just this feature. Never let that happen — on any exception,
+ * fall back to the completely untouched original $buffer, and surface the
+ * error via a plain, dependency-free console.log rather than any of our
+ * own helpers (in case one of those is what's broken).
+ *
+ * @param string $buffer
+ * @return string
+ */
 function wp_toc_process_buffer( $buffer ) {
+	try {
+		return wp_toc_process_buffer_inner( $buffer );
+	} catch ( \Throwable $e ) {
+		$msg = wp_json_encode(
+			array(
+				'stage' => 'buffer-fatal',
+				'error' => $e->getMessage(),
+				'file'  => basename( $e->getFile() ),
+				'line'  => $e->getLine(),
+			)
+		);
+		$script = '<script>console.error("[wp-toc-block]", ' . $msg . ');</script>';
+		return ( false !== strpos( $buffer, '</body>' ) )
+			? str_replace( '</body>', $script . '</body>', $buffer )
+			: $buffer . $script;
+	}
+}
+
+/**
+ * @param string $buffer
+ * @return string
+ */
+function wp_toc_process_buffer_inner( $buffer ) {
 	// DEBUG: dump what this pass actually found into the browser console —
 	// remove once the Divi rendering issue is diagnosed.
 	$debug = array( 'stage' => 'buffer', 'post_id' => get_queried_object_id() );
@@ -623,9 +655,8 @@ function wp_toc_process_buffer( $buffer ) {
 	$settings = wp_toc_get_settings();
 	$levels   = $settings['heading_levels'];
 
-	$dom        = null;
-	$flat_all   = wp_toc_scan_headings( $buffer, $levels, $dom );
-	$scope_node = wp_toc_find_scope_node( $dom, get_queried_object_id() );
+	list( $flat_all, $dom ) = wp_toc_scan_headings( $buffer, $levels );
+	$scope_node              = wp_toc_find_scope_node( $dom, get_queried_object_id() );
 
 	$debug['heading_levels_setting']  = $levels;
 	$debug['headings_found_total']    = count( $flat_all );
