@@ -509,10 +509,16 @@ function wp_toc_process_content( $content ) {
 	}
 
 	$levels            = $settings['heading_levels'];
-	list( $flat_all )  = wp_toc_scan_headings( $content, $levels );
 	$processed_post_id = get_the_ID();
 
-	return wp_toc_finish( $content, $levels, $flat_all, $settings );
+	// Never let a failure here break the content around it — fall back to
+	// the original content with the placeholder removed.
+	try {
+		list( $flat_all ) = wp_toc_scan_headings( $content, $levels );
+		return wp_toc_finish( $content, $levels, $flat_all, $settings );
+	} catch ( \Throwable $e ) {
+		return str_replace( WP_TOC_PLACEHOLDER, '', $content );
+	}
 }
 
 /* -------------------------------------------------------------------------
@@ -533,6 +539,13 @@ function wp_toc_process_content( $content ) {
 
 add_action( 'template_redirect', 'wp_toc_maybe_buffer' );
 function wp_toc_maybe_buffer() {
+	// Emergency kill switch: put
+	//   define( 'WP_TOC_DISABLE_BUFFER', true );
+	// in wp-config.php to switch the whole-page pass off without
+	// deactivating the plugin or touching this file.
+	if ( defined( 'WP_TOC_DISABLE_BUFFER' ) && WP_TOC_DISABLE_BUFFER ) {
+		return;
+	}
 	if ( is_admin() || is_feed() || ! is_singular() || ! is_main_query() ) {
 		return;
 	}
@@ -800,7 +813,13 @@ function wp_toc_schema_string() {
 
 add_action( 'wp_footer', 'wp_toc_print_schema' );
 function wp_toc_print_schema() {
-	echo wp_toc_schema_string();
+	// Same reasoning as the buffer callback: never let this feature's
+	// failure break the page around it.
+	try {
+		echo wp_toc_schema_string();
+	} catch ( \Throwable $e ) {
+		return;
+	}
 }
 
 /* -------------------------------------------------------------------------
@@ -857,7 +876,11 @@ function wp_toc_print_css() {
 	if ( empty( $wp_toc_css_needed ) ) {
 		return;
 	}
-	echo wp_toc_css_string( wp_toc_get_settings() );
+	try {
+		echo wp_toc_css_string( wp_toc_get_settings() );
+	} catch ( \Throwable $e ) {
+		return;
+	}
 }
 
 add_action( 'init', 'wp_toc_register_script' );
