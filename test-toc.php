@@ -60,4 +60,19 @@ $html = wp_toc_render_tree(
 assert_true( false === strpos( $html, '<script>alert' ), 'heading text is escaped, not executed' );
 assert_true( false !== strpos( $html, 'href="#x&quot;y"' ) || false !== strpos( $html, 'href="#x%22y"' ), 'id is attribute-escaped in href' );
 
+// --- wp_toc_inject_ids: existing id preserved, missing id injected,
+//     empty heading skipped without breaking alignment for what follows ---
+$content = '<h2>First</h2><h2 id="custom">Second</h2><h2></h2><h2>Third</h2>';
+$flat_all = array(
+	array( 'id' => 'first', 'has_id' => false, 'skip' => false ),
+	array( 'id' => 'custom', 'has_id' => true, 'skip' => false ),
+	array( 'id' => null, 'has_id' => false, 'skip' => true ),
+	array( 'id' => 'third', 'has_id' => false, 'skip' => false ),
+);
+$injected = wp_toc_inject_ids( $content, array( 2 ), $flat_all );
+assert_true( false !== strpos( $injected, '<h2 id="first">First</h2>' ), 'missing id injected on first heading' );
+assert_true( false !== strpos( $injected, '<h2 id="custom">Second</h2>' ), 'existing id left untouched' );
+assert_true( false !== strpos( $injected, '<h2></h2>' ), 'empty heading left alone' );
+assert_true( false !== strpos( $injected, '<h2 id="third">Third</h2>' ), 'heading after the empty one still gets the right id (alignment holds)' );
+
 echo "All checks passed.\n";

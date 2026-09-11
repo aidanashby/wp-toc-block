@@ -85,6 +85,43 @@ function wp_toc_unique_id( $text, array &$used_ids, $slugify ) {
 }
 
 /**
+ * Inject id="..." into heading opening tags that don't already have one,
+ * leaving everything else in $content byte-identical — no DOM reserialize,
+ * which is known to subtly rewrite builder markup (inline SVGs, self-closing
+ * quirks) it never needed to touch.
+ *
+ * $flat_all must have one entry per <h{level}> opening tag in $content, in
+ * the same source order — including entries for empty headings (skip=true)
+ * — so the nth regex match here lines up with $flat_all[n]. A caller that
+ * filters empty headings out before calling this will misalign every
+ * heading after the first gap.
+ *
+ * @param string $content
+ * @param array  $levels   Heading levels included, e.g. [2, 3].
+ * @param array  $flat_all Each item: ['id' => ?string, 'has_id' => bool, 'skip' => bool].
+ * @return string
+ */
+function wp_toc_inject_ids( $content, array $levels, array $flat_all ) {
+	$pattern = '/<h([' . implode( '', $levels ) . '])\b([^>]*)>/i';
+	$index   = 0;
+
+	return preg_replace_callback(
+		$pattern,
+		function ( $matches ) use ( &$index, $flat_all ) {
+			$item = isset( $flat_all[ $index ] ) ? $flat_all[ $index ] : null;
+			$index++;
+
+			if ( ! $item || $item['skip'] || $item['has_id'] ) {
+				return $matches[0];
+			}
+
+			return '<h' . $matches[1] . ' id="' . esc_attr( $item['id'] ) . '"' . $matches[2] . '>';
+		},
+		$content
+	);
+}
+
+/**
  * Render a tree (from wp_toc_build_tree) as a nested <ul>.
  *
  * @param array $tree

@@ -50,27 +50,43 @@ Correct design — placeholder + single late-priority pass:
 2. One `add_filter('the_content', [...], PHP_INT_MAX)` — guaranteed to run after every other
    content filter, Divi's own rendering included, regardless of Divi 5's internal storage
    format — does the actual work once per request:
-   - Guard: `is_singular() && in_the_loop() && is_main_query() && !is_feed()` — without this,
-     the filter also fires (and duplicates/mangles output) on archive/index loops and RSS/Atom
-     feeds.
+   - Guard: `!is_feed() && is_singular() && is_main_query() && get_the_ID() === get_queried_object_id()`,
+     plus a static "already processed this post ID" flag. `in_the_loop()` was tried and
+     dropped — some builders render post content outside the classic Loop, so it can be
+     `false` on a normal singular page and silently kill the TOC. It also doesn't protect
+     against the actual risk (a "related posts" section on the same page looping over other
+     posts' content): `is_singular()`/`is_main_query()` stay true throughout that inner loop
+     too, since they describe the main query, not whichever post is currently being echoed —
+     the `get_the_ID() === get_queried_object_id()` check is what actually catches that.
    - `DOMDocument`: load the fragment with UTF-8 forced (British copy uses en dashes/curly
      quotes — without explicit UTF-8 handling `loadHTML()` mangles them) and
      `libxml_use_internal_errors(true)` around the call (suppress libxml's HTML5-tag noise
-     only — not a general error swallow). Pull output back via `saveHTML()` on the body's
-     child nodes, not the whole document — `loadHTML()` wraps fragments in `<html><body>`,
-     and re-saving the whole document duplicates that wrapper into the page.
+     only — not a general error swallow). **Read-only** — never call `saveHTML()` on the
+     mutated tree and swap it in for the whole post content. DOMDocument's HTML save
+     routines are known to subtly rewrite markup they didn't need to touch (self-closing
+     quirks, inline SVGs, attribute reordering) — exactly what Divi's builder output is full
+     of. Anchor IDs go back in via a targeted regex against the original `$content` string
+     instead (`wp_toc_inject_ids()`), so everything else stays byte-identical.
    - Query configured heading levels (H2–H6 per setting) in document order.
-   - If under min heading count or under min word count (`str_word_count(wp_strip_all_tags($content))`)
-     → replace every placeholder with an empty string, skip the rest.
-   - For each heading: keep an existing `id` if present; otherwise
+   - Keep one entry per matched heading *including empty ones* (marked to skip) — the later
+     regex injection counts `<h{level}>` opening tags in the same order, and a gap here
+     misaligns every heading after it.
+   - If under min heading count (counting only non-empty headings) or under min word count
+     (`str_word_count(wp_strip_all_tags($content))`) → replace every placeholder with an
+     empty string, skip the rest.
+   - For each non-empty heading: keep an existing `id` if present; otherwise
      `id = sanitize_title($heading->textContent)`. Track used IDs in a set for this render;
      on collision append `-2`, `-3`, ...
    - Escape on output: `esc_html()` the heading text into the `<a>`, `esc_attr()` the id into
      the `href`. Built from arbitrary post content, so this isn't optional.
    - Build nested `<ul>` by heading level (H2 > H3 = child list); if content skips a level
      (H2 straight to H4), nest under the last-seen shallower heading — no extra setting needed.
-   - `str_replace()` every `WP_TOC_PLACEHOLDER` occurrence with the built list markup — this
-     makes rendering every shortcode instance (no dedupe) free: one scan, N replacements.
+   - Render the list markup **fresh per placeholder occurrence**, not once and pasted into
+     every match — each call to the render function increments its own instance counter, so
+     N `[toc]` shortcodes on the same page get N distinct `id`/`aria-controls` pairs. A single
+     shared string across all matches was tried first and is a real bug: duplicate `id`s are
+     invalid HTML, and the second toggle button's `aria-controls` resolves (via
+     `getElementById`) to the *first* instance's list, so clicking toggle #2 moves list #1.
 
 **Stated constraint:** `[toc]` only works placed inside actual post/page content. Divi 5
 Theme Builder areas (global header/footer/template parts) don't pass through `the_content` at

@@ -340,9 +340,20 @@ function wp_toc_process_content( $content ) {
 		return $content;
 	}
 
-	// Only the main content of a single post/page — not archives, feeds,
-	// or secondary loops, which would duplicate or mangle the output.
-	if ( is_feed() || ! is_singular() || ! in_the_loop() || ! is_main_query() ) {
+	static $processed_post_id = null;
+
+	// Only the queried singular post, not an archive/feed listing, and not
+	// a secondary loop (e.g. a "related posts" section) rendering other
+	// posts' content while the main query is still singular — is_singular()
+	// and is_main_query() alone stay true throughout that inner loop too,
+	// since they describe the main query, not whichever post is currently
+	// being echoed. Also never run twice for the same post in one request,
+	// whatever triggers the repeat call.
+	if (
+		is_feed() || ! is_singular() || ! is_main_query()
+		|| get_the_ID() !== get_queried_object_id()
+		|| get_the_ID() === $processed_post_id
+	) {
 		return str_replace( WP_TOC_PLACEHOLDER, '', $content );
 	}
 
@@ -356,19 +367,25 @@ function wp_toc_process_content( $content ) {
 		return str_replace( WP_TOC_PLACEHOLDER, '', $content );
 	}
 
-	$levels  = $settings['heading_levels'];
-	$tags    = array_map(
+	$levels = $settings['heading_levels'];
+	$tags   = array_map(
 		function ( $l ) {
 			return 'h' . $l;
 		},
 		$levels
 	);
 
+	// Read-only scan for heading text/existing IDs, in document order. We
+	// deliberately never write back DOMDocument's own HTML serialization —
+	// Divi and other builders emit markup (inline SVGs, self-closing
+	// quirks, data attributes) that DOMDocument's save routines are known
+	// to subtly rewrite. Anchor IDs are injected with a targeted regex
+	// instead (wp_toc_inject_ids), so everything else in $content stays
+	// byte-identical.
 	libxml_use_internal_errors( true );
 	$dom = new DOMDocument();
 	// The XML PI forces UTF-8 interpretation without adding a visible node;
-	// NOIMPLIED/NODEFDTD stop libxml wrapping the fragment in <html><body>,
-	// so saveHTML() below returns just the fragment back.
+	// NOIMPLIED/NODEFDTD stop libxml wrapping the fragment in <html><body>.
 	$dom->loadHTML( '<?xml encoding="utf-8" ?>' . $content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD );
 	libxml_clear_errors();
 
@@ -376,42 +393,53 @@ function wp_toc_process_content( $content ) {
 	$query    = '//' . implode( '|//', $tags );
 	$headings = $xpath->query( $query );
 
-	if ( ! $headings || $headings->length < $settings['min_headings'] ) {
-		return str_replace( WP_TOC_PLACEHOLDER, '', $content );
+	// One entry per matched heading, in order, including empty ones (marked
+	// skip) — wp_toc_inject_ids() needs this exact 1:1 alignment with the
+	// <h{level}> tags it finds by regex in $content, or every heading after
+	// a skipped one gets the wrong id.
+	$flat_all = array();
+	if ( $headings ) {
+		foreach ( $headings as $heading ) {
+			$text        = trim( $heading->textContent );
+			$existing_id = $heading->getAttribute( 'id' );
+			$flat_all[]  = array(
+				'level'  => (int) substr( $heading->nodeName, 1 ),
+				'text'   => $text,
+				'has_id' => ( '' !== $existing_id ),
+				'id'     => ( '' !== $existing_id ) ? $existing_id : null,
+				'skip'   => ( '' === $text ),
+			);
+		}
 	}
 
 	$used_ids = array();
-	$flat     = array();
-
-	foreach ( $headings as $heading ) {
-		$text = trim( $heading->textContent );
-		if ( '' === $text ) {
+	foreach ( $flat_all as &$item ) {
+		if ( $item['skip'] ) {
 			continue;
 		}
-
-		$existing_id = $heading->getAttribute( 'id' );
-		if ( '' !== $existing_id ) {
-			$id               = $existing_id;
-			$used_ids[ $id ]  = true;
+		if ( $item['has_id'] ) {
+			$used_ids[ $item['id'] ] = true;
 		} else {
-			$id = wp_toc_unique_id( $text, $used_ids, 'sanitize_title' );
-			$heading->setAttribute( 'id', $id );
+			$item['id'] = wp_toc_unique_id( $item['text'], $used_ids, 'sanitize_title' );
 		}
-
-		$flat[] = array(
-			'level' => (int) substr( $heading->nodeName, 1 ),
-			'id'    => $id,
-			'text'  => $text,
-		);
 	}
+	unset( $item );
 
-	if ( empty( $flat ) ) {
+	$flat = array_values(
+		array_filter(
+			$flat_all,
+			function ( $i ) {
+				return ! $i['skip'];
+			}
+		)
+	);
+
+	if ( count( $flat ) < $settings['min_headings'] ) {
 		return str_replace( WP_TOC_PLACEHOLDER, '', $content );
 	}
 
-	$content_with_ids = $dom->saveHTML();
-	$tree              = wp_toc_build_tree( $flat );
-	$toc_html          = wp_toc_render_toc( $tree, $settings );
+	$content_with_ids = wp_toc_inject_ids( $content, $levels, $flat_all );
+	$tree             = wp_toc_build_tree( $flat );
 
 	wp_toc_register_schema( $flat );
 	wp_toc_mark_css_needed();
@@ -419,7 +447,19 @@ function wp_toc_process_content( $content ) {
 		wp_enqueue_script( 'wp-toc-block' );
 	}
 
-	return str_replace( WP_TOC_PLACEHOLDER, $toc_html, $content_with_ids );
+	$processed_post_id = get_the_ID();
+
+	// A fresh wp_toc_render_toc() call per placeholder, not one shared
+	// string — each call increments its own instance counter, so multiple
+	// [toc] shortcodes on the same page get distinct ids instead of
+	// duplicate ones (which would break toggle_view's aria-controls).
+	return preg_replace_callback(
+		'/' . preg_quote( WP_TOC_PLACEHOLDER, '/' ) . '/',
+		function () use ( $tree, $settings ) {
+			return wp_toc_render_toc( $tree, $settings );
+		},
+		$content_with_ids
+	);
 }
 
 /**
