@@ -130,24 +130,41 @@
 			align = '.wp-toc--align-center{margin:0 auto 1em;}';
 		}
 
+		// List rules are prefixed with .wp-toc and marked !important because
+		// Divi resets lists inside content areas with selectors like
+		// `.et_pb_text_inner ul` (0,1,1), which out-specifies a lone
+		// `.wp-toc__list` (0,1,0) — that reset was silently removing the
+		// nested indent and the padding the markers sit in, so nesting
+		// vanished and bullets were clipped outside the box.
 		var markers = '';
 		if ( 'bullet' === s.listType ) {
-			markers = '.wp-toc__list,.wp-toc__list ul{list-style:disc;padding-left:1.25em;}';
+			markers =
+				'.wp-toc .wp-toc__list,.wp-toc .wp-toc__list ul{list-style:disc !important;padding-left:1.4em !important;}';
 		} else if ( 'number' === s.listType ) {
-			markers = '.wp-toc__list,.wp-toc__list ol{list-style:decimal;padding-left:1.5em;}';
+			markers =
+				'.wp-toc .wp-toc__list,.wp-toc .wp-toc__list ol{list-style:decimal !important;padding-left:1.6em !important;}';
 		} else {
-			markers = '.wp-toc__list,.wp-toc__list ul,.wp-toc__list ol{list-style:none;padding:0;}';
+			markers =
+				'.wp-toc .wp-toc__list,.wp-toc .wp-toc__list ul,.wp-toc .wp-toc__list ol' +
+				'{list-style:none !important;padding-left:0 !important;}';
 		}
 
 		var css =
+			// position/z-index so nothing in the theme can overlay the block
+			// and swallow clicks on the header.
 			'.wp-toc{background:' + s.colors.bg + ';color:' + s.colors.text +
 			';border:1px solid ' + s.colors.border +
-			';padding:1em 1.5em;box-sizing:border-box;width:100%;max-width:' + s.maxWidth + 'px;margin:0 0 1em 0;}' +
+			';padding:1em 1.5em;box-sizing:border-box;width:100%;max-width:' + s.maxWidth + 'px;' +
+			'margin:0 0 1em 0;position:relative;z-index:2;}' +
 			align +
-			// Collapsed: shrink to fit the header rather than sitting at full
-			// width with nothing to show for it.
-			'.wp-toc.is-collapsed{width:fit-content;max-width:100%;}' +
-			'.wp-toc.is-collapsed .wp-toc__header{white-space:nowrap;}' +
+
+			// Shrink-to-fit only once the closing animation has finished. A
+			// visibility:hidden panel still occupies layout width, so applying
+			// fit-content while the list is merely collapsed measures the whole
+			// list and produces a box far wider than the configured maximum.
+			'.wp-toc.is-shrunk{width:fit-content;max-width:100%;}' +
+			'.wp-toc.is-shrunk .wp-toc__panel{width:0;}' +
+			'.wp-toc.is-shrunk .wp-toc__header{white-space:nowrap;}' +
 
 			// The header is a real <button> when toggling is on, so the whole
 			// top of the block is clickable and keyboard-operable. Strip the
@@ -162,15 +179,16 @@
 
 			// Animating to height:auto isn't possible, but a grid row track
 			// from 0fr to 1fr is, and it handles any content height.
-			'.wp-toc__panel{display:grid;grid-template-rows:0fr;visibility:hidden;' +
+			'.wp-toc__panel{display:grid;grid-template-rows:1fr;' +
 			'transition:grid-template-rows 220ms ease,visibility 220ms;}' +
-			'.wp-toc:not(.is-collapsed) .wp-toc__panel{grid-template-rows:1fr;visibility:visible;}' +
+			'.wp-toc.is-collapsed .wp-toc__panel{grid-template-rows:0fr;visibility:hidden;}' +
 			'.wp-toc__panel>*{overflow:hidden;min-height:0;}' +
 
 			markers +
-			'.wp-toc__list{margin:0;}' +
+			'.wp-toc .wp-toc__list{margin:0;}' +
 			'.wp-toc:not(.is-collapsed) .wp-toc__list{margin-top:.75em;}' +
-			'.wp-toc__list ul,.wp-toc__list ol{font-size:calc(' + s.scale + ' * 1em);margin-left:' + s.indent + 'px;}' +
+			'.wp-toc .wp-toc__list ul,.wp-toc .wp-toc__list ol' +
+			'{font-size:calc(' + s.scale + ' * 1em);margin-left:' + s.indent + 'px !important;}' +
 			'.wp-toc a{color:' + s.colors.link + ';text-decoration:none;}' +
 			'.wp-toc a:hover{color:' + s.colors.linkHover + ';text-decoration:underline;}' +
 			'@media (prefers-reduced-motion:reduce){.wp-toc__panel,.wp-toc__icon{transition:none;}}';
@@ -213,7 +231,8 @@
 		var panelId = 'wp-toc-panel-' + instance;
 		var collapsed = s.toggle && s.startHidden;
 
-		nav.className = 'wp-toc wp-toc--align-' + s.align + ( collapsed ? ' is-collapsed' : '' );
+		nav.className =
+			'wp-toc wp-toc--align-' + s.align + ( collapsed ? ' is-collapsed is-shrunk' : '' );
 		nav.setAttribute( 'aria-label', 'Table of contents' );
 
 		if ( s.showLabel || s.toggle ) {
@@ -245,6 +264,21 @@
 					var expanded = 'true' === header.getAttribute( 'aria-expanded' );
 					header.setAttribute( 'aria-expanded', String( ! expanded ) );
 					nav.classList.toggle( 'is-collapsed', expanded );
+
+					if ( expanded ) {
+						// Closing: shrink the box only once the list has
+						// finished sliding shut, or it would snap away
+						// sideways instead of animating.
+						window.setTimeout( function () {
+							if ( nav.classList.contains( 'is-collapsed' ) ) {
+								nav.classList.add( 'is-shrunk' );
+							}
+						}, 230 );
+					} else {
+						// Opening: give the list its width back immediately so
+						// it has somewhere to animate into.
+						nav.classList.remove( 'is-shrunk' );
+					}
 				} );
 			}
 
