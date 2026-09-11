@@ -117,15 +117,16 @@
 			return;
 		}
 
-		// Margin-based alignment, not float: Divi 5 modules are flex
-		// containers, and flex items don't wrap around floats — a floated
-		// block just overlapped the next module and got painted over, so
-		// expanding it appeared to do nothing.
+		// Left/right float so surrounding content flows around the block
+		// rather than starting below it. The z-index on .wp-toc below is what
+		// keeps a floated block clickable — without it the theme's own
+		// stacking swallowed clicks on the header, which looked like the
+		// block refusing to expand.
 		var align = '';
 		if ( 'left' === s.align ) {
-			align = '.wp-toc--align-left{margin:0 auto 1em 0;}';
+			align = '.wp-toc--align-left{float:left;margin:0 1.5em 1em 0;}';
 		} else if ( 'right' === s.align ) {
-			align = '.wp-toc--align-right{margin:0 0 1em auto;}';
+			align = '.wp-toc--align-right{float:right;margin:0 0 1em 1.5em;}';
 		} else if ( 'center' === s.align ) {
 			align = '.wp-toc--align-center{margin:0 auto 1em;}';
 		}
@@ -377,7 +378,12 @@
 		}
 
 		injectCss( s );
-		var tree = buildTree( flat );
+
+		var tree = s.nested
+			? buildTree( flat )
+			: flat.map( function ( item ) {
+				return { id: item.id, text: item.text, children: [] };
+			} );
 
 		Array.prototype.forEach.call( mounts, function ( mount, i ) {
 			mount.appendChild( buildToc( tree, s, i + 1 ) );

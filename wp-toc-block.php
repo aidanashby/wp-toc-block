@@ -68,6 +68,7 @@ function wp_toc_defaults() {
 		'max_width'       => 250,
 		'alignment'       => 'none',
 		'list_type'       => 'none',
+		'nested_list'     => true,
 		'color_bg'        => '#f7f7f7',
 		'color_text'      => '#1e1e1e',
 		'color_link'      => '#1e1e1e',
@@ -150,6 +151,7 @@ function wp_toc_sanitize_settings( $input ) {
 		$out['min_words'] = absint( $input['min_words'] );
 	}
 
+	$out['nested_list']      = ! empty( $input['nested_list'] );
 	$out['show_label']       = ! empty( $input['show_label'] );
 	$out['label_text']       = isset( $input['label_text'] ) ? sanitize_text_field( $input['label_text'] ) : $defaults['label_text'];
 	$out['toggle_view']      = ! empty( $input['toggle_view'] );
@@ -313,8 +315,8 @@ function wp_toc_render_settings_page() {
 							<?php
 							$alignments = array(
 								'none'   => __( 'None (full width, up to the maximum)', 'wp-toc-block' ),
-								'left'   => __( 'Left', 'wp-toc-block' ),
-								'right'  => __( 'Right', 'wp-toc-block' ),
+								'left'   => __( 'Left (content flows around it)', 'wp-toc-block' ),
+								'right'  => __( 'Right (content flows around it)', 'wp-toc-block' ),
 								'center' => __( 'Centre', 'wp-toc-block' ),
 							);
 							foreach ( $alignments as $value => $label ) :
@@ -322,6 +324,16 @@ function wp_toc_render_settings_page() {
 								<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $s['alignment'], $value ); ?>><?php echo esc_html( $label ); ?></option>
 							<?php endforeach; ?>
 						</select>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Nested list', 'wp-toc-block' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="<?php echo $opt; ?>[nested_list]" value="1" <?php checked( $s['nested_list'] ); ?>>
+							<?php esc_html_e( 'Indent sub-headings under their parent heading', 'wp-toc-block' ); ?>
+						</label>
+						<p class="description"><?php esc_html_e( 'Unchecked lists every heading at the same level.', 'wp-toc-block' ); ?></p>
 					</td>
 				</tr>
 				<tr>
@@ -402,6 +414,7 @@ function wp_toc_shortcode( $atts ) {
 		'maxWidth'    => (int) $s['max_width'],
 		'align'       => $s['alignment'],
 		'listType'    => $s['list_type'],
+		'nested'      => (bool) $s['nested_list'],
 		'colors'      => array(
 			'bg'        => $s['color_bg'],
 			'text'      => $s['color_text'],
