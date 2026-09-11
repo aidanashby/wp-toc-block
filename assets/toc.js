@@ -8,6 +8,11 @@ document.addEventListener( 'DOMContentLoaded', function () {
 			var expanded = button.getAttribute( 'aria-expanded' ) === 'true';
 			button.setAttribute( 'aria-expanded', String( ! expanded ) );
 			list.hidden = expanded;
+
+			var nav = button.closest( '.wp-toc' );
+			if ( nav ) {
+				nav.classList.toggle( 'is-collapsed', expanded );
+			}
 		} );
 	} );
 } );

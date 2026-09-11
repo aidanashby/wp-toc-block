@@ -24,7 +24,6 @@ skipped: build step / bundler — plain CSS+JS, no npm needed for this scope.
 
 | Setting | Type | Default |
 |---|---|---|
-| Enabled post types | checkboxes over `get_post_types(['public'=>true])` | `post`, `page` |
 | Min heading count | number | 2 |
 | Min word count | number | 0 (unlimited) |
 | Show header label | checkbox | on |
@@ -92,6 +91,15 @@ Correct design — placeholder + single late-priority pass:
 Theme Builder areas (global header/footer/template parts) don't pass through `the_content` at
 all, so a `[toc]` dropped there won't be replaced. Document this rather than let someone
 discover it as a silent bug.
+
+**Found in live testing:** the same failure mode also hits Divi's **Code** module
+specifically — confirmed by testing, not theory. It runs shortcodes via a direct
+`do_shortcode()` call on its own saved text (that's how it can support shortcodes at all),
+which never touches the `the_content` filter chain. The `[toc]` callback still fires (it's a
+registered shortcode, so any `do_shortcode()` call anywhere triggers it) and produces the
+placeholder, but nothing ever replaces it — an invisible `<!--WP_TOC_PLACEHOLDER-->` HTML
+comment left sitting in the page source. Fix is placement, not code: use a **Text** module
+(or the block/classic editor body), not Code.
 
 ## Output markup
 

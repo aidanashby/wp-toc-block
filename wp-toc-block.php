@@ -56,7 +56,6 @@ function wp_toc_init_updater() {
  */
 function wp_toc_defaults() {
 	return array(
-		'post_types'      => array( 'post', 'page' ),
 		'min_headings'    => 2,
 		'min_words'       => 0,
 		'show_label'      => true,
@@ -66,6 +65,8 @@ function wp_toc_defaults() {
 		'heading_levels'  => array( 2, 3 ),
 		'scale_ratio'     => 0.9,
 		'indent_px'       => 16,
+		'max_width'       => 250,
+		'alignment'       => 'none',
 		'color_bg'        => '#f7f7f7',
 		'color_text'      => '#1e1e1e',
 		'color_link'      => '#1e1e1e',
@@ -136,11 +137,6 @@ function wp_toc_sanitize_settings( $input ) {
 		return $out;
 	}
 
-	$valid_post_types    = array_keys( get_post_types( array( 'public' => true ) ) );
-	$out['post_types']   = isset( $input['post_types'] ) && is_array( $input['post_types'] )
-		? array_values( array_intersect( $valid_post_types, $input['post_types'] ) )
-		: array();
-
 	if ( isset( $input['min_headings'] ) ) {
 		$out['min_headings'] = max( 1, absint( $input['min_headings'] ) );
 	}
@@ -171,6 +167,17 @@ function wp_toc_sanitize_settings( $input ) {
 	}
 	if ( isset( $input['indent_px'] ) ) {
 		$out['indent_px'] = absint( $input['indent_px'] );
+	}
+
+	if ( isset( $input['max_width'] ) ) {
+		$max_width         = absint( $input['max_width'] );
+		$out['max_width']  = $max_width > 0 ? $max_width : $defaults['max_width'];
+	}
+
+	if ( isset( $input['alignment'] ) ) {
+		$out['alignment'] = in_array( $input['alignment'], array( 'none', 'left', 'right', 'center' ), true )
+			? $input['alignment']
+			: $defaults['alignment'];
 	}
 
 	foreach ( array( 'color_bg', 'color_text', 'color_link', 'color_link_hover', 'color_border' ) as $key ) {
@@ -210,19 +217,8 @@ function wp_toc_render_settings_page() {
 		<form action="options.php" method="post">
 			<?php settings_fields( 'wp_toc_block' ); ?>
 
-			<h2><?php esc_html_e( 'Where it can appear', 'wp-toc-block' ); ?></h2>
+			<h2><?php esc_html_e( 'When it appears', 'wp-toc-block' ); ?></h2>
 			<table class="form-table" role="presentation">
-				<tr>
-					<th scope="row"><?php esc_html_e( 'Post types', 'wp-toc-block' ); ?></th>
-					<td>
-						<?php foreach ( get_post_types( array( 'public' => true ), 'objects' ) as $pt ) : ?>
-							<label>
-								<input type="checkbox" name="<?php echo $opt; ?>[post_types][]" value="<?php echo esc_attr( $pt->name ); ?>" <?php checked( in_array( $pt->name, $s['post_types'], true ) ); ?>>
-								<?php echo esc_html( $pt->labels->singular_name ); ?>
-							</label><br>
-						<?php endforeach; ?>
-					</td>
-				</tr>
 				<tr>
 					<th scope="row"><label for="toc-min-headings"><?php esc_html_e( 'Minimum headings to display', 'wp-toc-block' ); ?></label></th>
 					<td><input name="<?php echo $opt; ?>[min_headings]" id="toc-min-headings" type="number" min="1" step="1" value="<?php echo esc_attr( $s['min_headings'] ); ?>" class="small-text"></td>
@@ -283,6 +279,31 @@ function wp_toc_render_settings_page() {
 				<tr>
 					<th scope="row"><label for="toc-indent"><?php esc_html_e( 'Indent per level (px)', 'wp-toc-block' ); ?></label></th>
 					<td><input name="<?php echo $opt; ?>[indent_px]" id="toc-indent" type="number" min="0" step="1" value="<?php echo esc_attr( $s['indent_px'] ); ?>" class="small-text"></td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="toc-max-width"><?php esc_html_e( 'Maximum width (px)', 'wp-toc-block' ); ?></label></th>
+					<td>
+						<input name="<?php echo $opt; ?>[max_width]" id="toc-max-width" type="number" min="1" step="1" value="<?php echo esc_attr( $s['max_width'] ); ?>" class="small-text">
+						<p class="description"><?php esc_html_e( 'Width when expanded. When collapsed (toggle view), it shrinks to fit just the label and toggle icon.', 'wp-toc-block' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="toc-alignment"><?php esc_html_e( 'Alignment', 'wp-toc-block' ); ?></label></th>
+					<td>
+						<select name="<?php echo $opt; ?>[alignment]" id="toc-alignment">
+							<?php
+							$alignments = array(
+								'none'   => __( 'None (full width, in the flow of the content)', 'wp-toc-block' ),
+								'left'   => __( 'Left (floats, text wraps around it)', 'wp-toc-block' ),
+								'right'  => __( 'Right (floats, text wraps around it)', 'wp-toc-block' ),
+								'center' => __( 'Centre', 'wp-toc-block' ),
+							);
+							foreach ( $alignments as $value => $label ) :
+								?>
+								<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $s['alignment'], $value ); ?>><?php echo esc_html( $label ); ?></option>
+							<?php endforeach; ?>
+						</select>
+					</td>
 				</tr>
 			</table>
 
@@ -358,10 +379,6 @@ function wp_toc_process_content( $content ) {
 	}
 
 	$settings = wp_toc_get_settings();
-
-	if ( ! in_array( get_post_type(), $settings['post_types'], true ) ) {
-		return str_replace( WP_TOC_PLACEHOLDER, '', $content );
-	}
 
 	if ( $settings['min_words'] > 0 && str_word_count( wp_strip_all_tags( $content ) ) < $settings['min_words'] ) {
 		return str_replace( WP_TOC_PLACEHOLDER, '', $content );
@@ -487,13 +504,22 @@ function wp_toc_render_toc( array $tree, array $settings ) {
 		$header .= '</div>';
 	}
 
-	$hidden_attr = ( $settings['toggle_view'] && $settings['initially_hidden'] ) ? ' hidden' : '';
+	$collapsed   = ( $settings['toggle_view'] && $settings['initially_hidden'] );
+	$hidden_attr = $collapsed ? ' hidden' : '';
 
 	$list_html = wp_toc_render_tree( $tree );
 	// Tag the outer <ul> with our id/class without re-parsing it.
 	$list_html = preg_replace( '/^<ul>/', '<ul class="wp-toc__list" id="' . esc_attr( $list_id ) . '"' . $hidden_attr . '>', $list_html, 1 );
 
-	return '<nav class="wp-toc" aria-label="' . esc_attr__( 'Table of contents', 'wp-toc-block' ) . '">' . $header . $list_html . '</nav>';
+	// is-collapsed is set server-side (not just added by JS on first click)
+	// so the page loads already at its shrink-to-fit width instead of
+	// flashing full-width-then-shrinking once JS runs.
+	$nav_class = 'wp-toc wp-toc--align-' . sanitize_html_class( $settings['alignment'] );
+	if ( $collapsed ) {
+		$nav_class .= ' is-collapsed';
+	}
+
+	return '<nav class="' . esc_attr( $nav_class ) . '" aria-label="' . esc_attr__( 'Table of contents', 'wp-toc-block' ) . '">' . $header . $list_html . '</nav>';
 }
 
 /* -------------------------------------------------------------------------
@@ -552,10 +578,19 @@ function wp_toc_print_css() {
 			color: <?php echo esc_html( $s['color_text'] ); ?>;
 			border: 1px solid <?php echo esc_html( $s['color_border'] ); ?>;
 			padding: 1em 1.5em;
+			box-sizing: border-box;
+			width: 100%;
+			max-width: <?php echo (int) $s['max_width']; ?>px;
+			margin: 0 0 1em 0;
 		}
+		.wp-toc.is-collapsed { width: fit-content; max-width: 100%; }
+		.wp-toc.is-collapsed .wp-toc__header { white-space: nowrap; }
+		.wp-toc--align-left { float: left; margin: 0 1.5em 1em 0; }
+		.wp-toc--align-right { float: right; margin: 0 0 1em 1.5em; }
+		.wp-toc--align-center { margin: 0 auto 1em; }
 		.wp-toc__header { display: flex; align-items: center; justify-content: space-between; gap: 1em; }
 		.wp-toc__label { font-weight: 600; }
-		.wp-toc__toggle { background: none; border: 1px solid currentColor; cursor: pointer; padding: .25em .75em; }
+		.wp-toc__toggle { background: none; border: 1px solid currentColor; cursor: pointer; padding: .25em .75em; flex-shrink: 0; }
 		.wp-toc__list, .wp-toc__list ul { list-style: none; margin: 0; padding: 0; }
 		.wp-toc__list { margin-top: .75em; }
 		.wp-toc__list ul {

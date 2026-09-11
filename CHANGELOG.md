@@ -18,3 +18,16 @@
   no longer relies on `in_the_loop()` (unreliable with some builders) and
   now explicitly excludes secondary loops (e.g. related-posts sections) via
   a post-ID check.
+- Removed the "post types" setting — dead weight, since display is entirely
+  controlled by where you place the `[toc]` shortcode, not by an automatic
+  content-type match.
+- Found in live testing on Divi: `[toc]` placed in Divi's **Code** module
+  produces an unreplaced `<!--WP_TOC_PLACEHOLDER-->` comment, because the
+  Code module runs shortcodes via a direct `do_shortcode()` call on its own
+  saved text, bypassing the `the_content` filter chain entirely. Not a bug
+  in this plugin — documented as a placement constraint (use a Text module,
+  or the block/classic editor body, instead).
+- Added maximum-width and alignment settings. Collapsed (toggle view, list
+  hidden) now shrinks to fit just the label and toggle icon rather than
+  sitting at the full expanded width; expanded width defaults to 250px via
+  the new setting. Alignment adds none/left/right/centre.
