@@ -159,25 +159,27 @@
 			'.wp-toc{background:' + s.colors.bg + ';color:' + s.colors.text +
 			';border:1px solid ' + s.colors.border +
 			';padding:1em 1.5em;box-sizing:border-box;width:100%;max-width:' + s.maxWidth + 'px;' +
-			'margin:0 0 1em 0;position:relative;z-index:2;}' +
+			'margin:0 0 1em 0;position:relative;z-index:2;' +
+			// Width animates alongside the height. The two ends are measured
+			// in px by applyWidths(), because width can't transition between
+			// fit-content and a percentage.
+			'transition:width 220ms ease;}' +
 			align +
 
 			// Shrink-to-fit only once the closing animation has finished. A
 			// visibility:hidden panel still occupies layout width, so applying
 			// fit-content while the list is merely collapsed measures the whole
 			// list and produces a box far wider than the configured maximum.
-			'.wp-toc.is-shrunk{width:fit-content;max-width:100%;}' +
 			// Fully out of the layout once closed, so no residual height from
 			// the theme's own list padding can pad the block out.
 			'.wp-toc.is-shrunk .wp-toc__panel{display:none;}' +
-			'.wp-toc.is-shrunk .wp-toc__header{white-space:nowrap;}' +
 
 			// The header is a real <button> when toggling is on, so the whole
 			// top of the block is clickable and keyboard-operable. Strip the
 			// button chrome so it still looks like a heading row.
 			'.wp-toc__header{display:flex;align-items:center;justify-content:space-between;' +
 			'gap:1em;width:100%;margin:0;padding:0;background:none;border:0;color:inherit;' +
-			'font:inherit;text-align:left;}' +
+			'font:inherit;text-align:left;white-space:nowrap;}' +
 			'button.wp-toc__header{cursor:pointer;}' +
 			'.wp-toc__label{font-weight:700;}' +
 			'.wp-toc__icon{flex-shrink:0;transition:transform 200ms ease;}' +
@@ -197,12 +199,53 @@
 			'{font-size:calc(' + s.scale + ' * 1em);margin-left:' + s.indent + 'px !important;}' +
 			'.wp-toc a{color:' + s.colors.link + ';text-decoration:none;}' +
 			'.wp-toc a:hover{color:' + s.colors.linkHover + ';text-decoration:underline;}' +
-			'@media (prefers-reduced-motion:reduce){.wp-toc__panel,.wp-toc__icon{transition:none;}}';
+			'@media (prefers-reduced-motion:reduce){.wp-toc,.wp-toc__panel,.wp-toc__icon{transition:none;}}';
 
 		var style = document.createElement( 'style' );
 		style.id = 'wp-toc-style';
 		style.textContent = css;
 		document.head.appendChild( style );
+	}
+
+	/**
+	 * The two widths the block animates between, in px.
+	 *
+	 * Collapsed is what the header alone needs (its children plus the flex
+	 * gap, plus the block's own padding and border). Expanded is the
+	 * configured maximum, or the container if that's narrower. Both are
+	 * derived rather than measured by toggling styles, so this doesn't
+	 * thrash layout.
+	 */
+	function measureWidths( nav, header, s ) {
+		var navStyle = window.getComputedStyle( nav );
+		var chrome =
+			parseFloat( navStyle.paddingLeft ) +
+			parseFloat( navStyle.paddingRight ) +
+			parseFloat( navStyle.borderLeftWidth ) +
+			parseFloat( navStyle.borderRightWidth );
+
+		var content = 0;
+		Array.prototype.forEach.call( header.children, function ( child ) {
+			content += child.getBoundingClientRect().width;
+		} );
+		if ( header.children.length > 1 ) {
+			var gap = parseFloat( window.getComputedStyle( header ).columnGap );
+			content += ( header.children.length - 1 ) * ( gap || 0 );
+		}
+
+		var available = nav.parentNode ? nav.parentNode.clientWidth : 0;
+
+		return {
+			collapsed: Math.ceil( content + chrome ),
+			expanded: available ? Math.min( s.maxWidth, available ) : s.maxWidth
+		};
+	}
+
+	function applyWidths( nav, header, s ) {
+		nav._wpTocWidths = measureWidths( nav, header, s );
+		nav.style.width = nav.classList.contains( 'is-collapsed' )
+			? nav._wpTocWidths.collapsed + 'px'
+			: nav._wpTocWidths.expanded + 'px';
 	}
 
 	/** ItemList is the schema.org type that actually fits an in-page TOC. */
@@ -270,11 +313,17 @@
 					var expanded = 'true' === header.getAttribute( 'aria-expanded' );
 					header.setAttribute( 'aria-expanded', String( ! expanded ) );
 
+					var widths = nav._wpTocWidths;
+
 					if ( expanded ) {
-						// Closing: animate shut first, then take the panel out
-						// of the layout — doing it immediately would make the
-						// list vanish instead of sliding away.
+						// Closing: height and width animate together, then the
+						// panel leaves the layout once they've finished —
+						// removing it immediately would make the list vanish
+						// instead of sliding away.
 						nav.classList.add( 'is-collapsed' );
+						if ( widths ) {
+							nav.style.width = widths.collapsed + 'px';
+						}
 						window.setTimeout( function () {
 							if ( nav.classList.contains( 'is-collapsed' ) ) {
 								nav.classList.add( 'is-shrunk' );
@@ -289,6 +338,9 @@
 						window.requestAnimationFrame( function () {
 							window.requestAnimationFrame( function () {
 								nav.classList.remove( 'is-collapsed' );
+								if ( widths ) {
+									nav.style.width = widths.expanded + 'px';
+								}
 							} );
 						} );
 					}
@@ -296,6 +348,9 @@
 			}
 
 			nav.appendChild( header );
+			// Kept for measureWidths(), which can only run once the block is
+			// actually in the document.
+			nav._wpTocHeader = header;
 		}
 
 		// The panel is the animated wrapper; the list sits inside it.
@@ -385,9 +440,35 @@
 				return { id: item.id, text: item.text, children: [] };
 			} );
 
+		var navs = [];
 		Array.prototype.forEach.call( mounts, function ( mount, i ) {
-			mount.appendChild( buildToc( tree, s, i + 1 ) );
+			var nav = buildToc( tree, s, i + 1 );
+			mount.appendChild( nav );
+			navs.push( nav );
 		} );
+
+		// Widths can only be measured once the blocks are in the document.
+		if ( s.toggle ) {
+			navs.forEach( function ( nav ) {
+				if ( nav._wpTocHeader ) {
+					applyWidths( nav, nav._wpTocHeader, s );
+				}
+			} );
+
+			// The expanded width depends on the container, so it has to be
+			// recalculated when that changes.
+			var resizeTimer = null;
+			window.addEventListener( 'resize', function () {
+				window.clearTimeout( resizeTimer );
+				resizeTimer = window.setTimeout( function () {
+					navs.forEach( function ( nav ) {
+						if ( nav._wpTocHeader ) {
+							applyWidths( nav, nav._wpTocHeader, s );
+						}
+					} );
+				}, 150 );
+			} );
+		}
 
 		injectSchema( flat );
 	}
