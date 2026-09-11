@@ -64,13 +64,13 @@ function wp_toc_defaults() {
 		'initially_hidden' => true,
 		'heading_levels'  => array( 2, 3 ),
 		'scale_ratio'     => 0.9,
-		'indent_px'       => 16,
+		'indent_em'       => 1,
 		'max_width'       => 250,
 		'alignment'       => 'left',
 		'float_block'     => true,
 		'list_type'       => 'none',
 		'line_height'     => 1.3,
-		'item_spacing'    => 10,
+		'item_spacing_em' => 0.6,
 		'scroll_offset'   => 0,
 		'color_bg'        => '#eaeaea',
 		'color_text'      => '#1e1e1e',
@@ -184,8 +184,9 @@ function wp_toc_sanitize_settings( $input ) {
 		$ratio              = (float) $input['scale_ratio'];
 		$out['scale_ratio'] = ( $ratio > 0 && $ratio <= 1 ) ? $ratio : $defaults['scale_ratio'];
 	}
-	if ( isset( $input['indent_px'] ) ) {
-		$out['indent_px'] = absint( $input['indent_px'] );
+	if ( isset( $input['indent_em'] ) ) {
+		$indent             = (float) $input['indent_em'];
+		$out['indent_em']   = $indent >= 0 ? $indent : $defaults['indent_em'];
 	}
 
 	if ( isset( $input['max_width'] ) ) {
@@ -203,8 +204,9 @@ function wp_toc_sanitize_settings( $input ) {
 		$line_height         = (float) $input['line_height'];
 		$out['line_height']  = $line_height > 0 ? $line_height : $defaults['line_height'];
 	}
-	if ( isset( $input['item_spacing'] ) ) {
-		$out['item_spacing'] = absint( $input['item_spacing'] );
+	if ( isset( $input['item_spacing_em'] ) ) {
+		$spacing                 = (float) $input['item_spacing_em'];
+		$out['item_spacing_em']  = $spacing >= 0 ? $spacing : $defaults['item_spacing_em'];
 	}
 	if ( isset( $input['scroll_offset'] ) ) {
 		$out['scroll_offset'] = absint( $input['scroll_offset'] );
@@ -326,8 +328,8 @@ function wp_toc_render_settings_page() {
 					</td>
 				</tr>
 				<tr>
-					<th scope="row"><label for="toc-indent"><?php esc_html_e( 'Indent per level (px)', 'wp-toc-block' ); ?></label></th>
-					<td><input name="<?php echo $opt; ?>[indent_px]" id="toc-indent" type="number" min="0" step="1" value="<?php echo esc_attr( $s['indent_px'] ); ?>" class="small-text"></td>
+					<th scope="row"><label for="toc-indent"><?php esc_html_e( 'Indent per level (em)', 'wp-toc-block' ); ?></label></th>
+					<td><input name="<?php echo $opt; ?>[indent_em]" id="toc-indent" type="number" min="0" step="0.05" value="<?php echo esc_attr( $s['indent_em'] ); ?>" class="small-text"></td>
 				</tr>
 				<tr>
 					<th scope="row"><label for="toc-line-height"><?php esc_html_e( 'Line height', 'wp-toc-block' ); ?></label></th>
@@ -337,8 +339,8 @@ function wp_toc_render_settings_page() {
 					</td>
 				</tr>
 				<tr>
-					<th scope="row"><label for="toc-item-spacing"><?php esc_html_e( 'Space between items (px)', 'wp-toc-block' ); ?></label></th>
-					<td><input name="<?php echo $opt; ?>[item_spacing]" id="toc-item-spacing" type="number" min="0" step="1" value="<?php echo esc_attr( $s['item_spacing'] ); ?>" class="small-text"></td>
+					<th scope="row"><label for="toc-item-spacing"><?php esc_html_e( 'Space between items (em)', 'wp-toc-block' ); ?></label></th>
+					<td><input name="<?php echo $opt; ?>[item_spacing_em]" id="toc-item-spacing" type="number" min="0" step="0.05" value="<?php echo esc_attr( $s['item_spacing_em'] ); ?>" class="small-text"></td>
 				</tr>
 				<tr>
 					<th scope="row"><label for="toc-scroll-offset"><?php esc_html_e( 'Scroll offset (px)', 'wp-toc-block' ); ?></label></th>
@@ -455,13 +457,13 @@ function wp_toc_shortcode( $atts ) {
 		'toggle'      => (bool) $s['toggle_view'],
 		'startHidden' => (bool) $s['initially_hidden'],
 		'scale'       => (float) $s['scale_ratio'],
-		'indent'      => (int) $s['indent_px'],
+		'indent'      => (float) $s['indent_em'],
 		'maxWidth'    => (int) $s['max_width'],
 		'align'       => $s['alignment'],
 		'floatBlock'  => (bool) $s['float_block'],
 		'listType'    => $s['list_type'],
 		'lineHeight'  => (float) $s['line_height'],
-		'itemSpacing' => (int) $s['item_spacing'],
+		'itemSpacing' => (float) $s['item_spacing_em'],
 		'scrollOffset' => (int) $s['scroll_offset'],
 		'colors'      => array(
 			'bg'        => $s['color_bg'],

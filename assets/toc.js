@@ -207,10 +207,10 @@
 
 			markers +
 			'.wp-toc .wp-toc__list{margin:0;}' +
-			'.wp-toc .wp-toc__list li{line-height:' + s.lineHeight + 'em;margin-bottom:' + s.itemSpacing + 'px;}' +
+			'.wp-toc .wp-toc__list li{line-height:' + s.lineHeight + 'em;margin-bottom:' + s.itemSpacing + 'em;}' +
 			'.wp-toc:not(.is-collapsed) .wp-toc__list{margin-top:.75em;}' +
 			'.wp-toc .wp-toc__list ul,.wp-toc .wp-toc__list ol' +
-			'{font-size:calc(' + s.scale + ' * 1em);margin-left:' + s.indent + 'px !important;}' +
+			'{font-size:calc(' + s.scale + ' * 1em);margin-left:' + s.indent + 'em !important;}' +
 			'.wp-toc a{color:' + s.colors.link + ';text-decoration:none;}' +
 			'.wp-toc a:hover{color:' + s.colors.linkHover + ';text-decoration:underline;}' +
 			'@media (prefers-reduced-motion:reduce){.wp-toc,.wp-toc__panel,.wp-toc__icon{transition:none;}}';

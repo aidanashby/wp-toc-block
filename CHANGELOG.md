@@ -1,92 +1,52 @@
 # Changelog
 
-## Unreleased
+All notable changes to WP TOC Block are documented here.
 
-- Fixed: left and right alignment stopped the block expanding. Cause was
-  `float` — Divi 5 modules are flex containers, and flex items don't wrap
-  around floats, so the floated block overlapped the next module and was
-  painted over by it. Alignment is now margin-based, which has no
-  containment or stacking problems. Text no longer flows *around* the
-  block, which never actually worked between sibling Divi modules anyway.
-- The whole top of the block is now the toggle, not just a small button,
-  and it's a real `<button>` element so it stays keyboard-operable and
-  properly announced (a clickable `<div>` would be neither).
-- Replaced the "Toggle" text with a chevron icon that rotates on open.
-- Expand/collapse now animates (220ms), using a `0fr`/`1fr` grid row track
-  since `height:auto` can't be transitioned. Honours
-  `prefers-reduced-motion`.
-- Added a "list markers" setting: none, bullets, or numbers (numbers render
-  as `<ol>`).
+## 0.1.0
 
-- **Rewritten to build the table of contents client-side.** Every server-side
-  approach failed against Divi 5, which assembles its module tree through its
-  own pipeline and never passes the finished HTML back through `the_content`.
-  Hooking `the_content` produced nothing in any Divi module; parsing the whole
-  page in an output buffer instead worked only intermittently and, when it
-  failed (memory exhaustion, which `try`/`catch` cannot catch), returned an
-  empty response — blanking the entire page on any post using the shortcode.
-  That is an unacceptable failure mode for a navigation aid.
+Initial release. Built for Divi 5.
 
-  PHP now only emits a mount element carrying the settings; `assets/toc.js`
-  finds the headings in the already-rendered DOM, where how Divi built them no
-  longer matters, and the worst case is no table of contents. Removed the
-  `the_content` filter, the output buffer, the server-side DOM parsing, the
-  anchor-injection regex, and the debug instrumentation that went with them —
-  the plugin is less than half its previous size.
+- `[toc]` shortcode, usable more than once on a page, building a nested table of
+  contents from the headings in the post content.
+- Settings page under Settings → WP TOC Block, with a Settings link on the Plugins
+  screen:
+  - **Content container selector** (default `.et_pb_post_content`) — which element
+    holds the post content, so site header, menu and footer headings stay out of
+    the list. The plugin warns in the browser console when it matches nothing.
+  - Minimum heading count and minimum word count before the list displays.
+  - Header label text, and whether to show it.
+  - Toggle view (collapsible), and whether it starts collapsed.
+  - Heading levels included (H2–H6).
+  - Heading size scale ratio, per-level indent, line height, and space between
+    items.
+  - Maximum width, alignment (left/right/centre), and whether the block floats so
+    content flows around it.
+  - List markers: none, bullets or numbers.
+  - Scroll offset, to stop a clicked link landing the heading underneath a fixed
+    header bar.
+  - Colours for background, text, links, hover and border.
+- With toggle view on, the whole top of the block expands and collapses it — a real
+  `<button>`, so it stays keyboard-operable and properly announced. Width and height
+  animate together over 220ms with a rotating chevron, and `prefers-reduced-motion`
+  is honoured.
+- Anchor IDs are added to headings that don't already have one, without colliding
+  with IDs already used elsewhere on the page. The scroll offset is applied as
+  `scroll-margin-top` on the headings rather than by intercepting clicks, so it also
+  covers arriving on a `#hash` directly and browser back/forward.
+- Outputs `ItemList` schema.org JSON-LD for the generated list.
+- Self-updates from GitHub releases via the bundled Plugin Update Checker. Uninstall
+  removes the plugin's own option plus the update checker's bookkeeping, which that
+  library doesn't clean up itself.
 
-  Trade-off: the list isn't in the server HTML and requires JavaScript.
-- Added a "content container selector" setting (default `.et_pb_post_content`),
-  so the element holding the post content can be corrected without a code
-  change. Guessing it wrongly was the cause of a long debugging detour; the
-  plugin now warns in the browser console when it matches nothing.
+### Note on the approach
 
-- Fixed the actual bug: the guessed content-wrapper class names
-  (`et_builder_inner_content`, `entry-content`, `et-l--post`) didn't match
-  anything on this site, so the buffer fallback marked all real headings
-  "out of scope" and correctly-but-uselessly stripped the placeholder to
-  empty. Confirmed via debug console output, then the real class —
-  `et_pb_post_content` (Divi 5's actual "Post Content" module wrapper on
-  this site) — given directly by the site owner. Plugin targets this
-  theme only, so the generic guesses were dropped rather than kept as
-  fallbacks.
+The list is built in the browser rather than in PHP. Divi 5 assembles its module
+tree through its own pipeline and never passes the finished HTML back through
+WordPress's `the_content` filter, so no server-side filter reliably sees the
+rendered markup. Parsing the whole page server-side in an output buffer was tried
+and rejected — a failure there (memory exhaustion in particular, which `try`/`catch`
+cannot catch) takes the entire page down, which is an unacceptable risk for a
+navigation aid. See the README for the full reasoning and trade-offs.
 
-- Initial build: `[toc]` shortcode, settings page, heading scan with anchor
-  assignment, nested list rendering, colour/scale/indent settings, toggle
-  view, `ItemList` schema.org JSON-LD.
-- Uninstall now also removes the Plugin Update Checker library's own
-  bookkeeping (its `external_updates-wp-toc-block` option and
-  `puc_cron_check_updates-wp-toc-block` cron event), which it does not
-  clean up on its own.
-- Fixed before first release, caught in review: multiple `[toc]` shortcodes
-  on one page produced duplicate `id`s, breaking toggle_view on all but the
-  first instance. Anchor ID assignment no longer reserializes the whole
-  post content through DOMDocument (risk of corrupting builder markup it
-  didn't need to touch) — IDs are injected into the original content with
-  a targeted, alignment-safe regex instead. The `the_content` filter guard
-  no longer relies on `in_the_loop()` (unreliable with some builders) and
-  now explicitly excludes secondary loops (e.g. related-posts sections) via
-  a post-ID check.
-- Removed the "post types" setting — dead weight, since display is entirely
-  controlled by where you place the `[toc]` shortcode, not by an automatic
-  content-type match.
-- Found in live testing on Divi: `[toc]` placed in Divi's **Code** module
-  produces an unreplaced `<!--WP_TOC_PLACEHOLDER-->` comment, because the
-  Code module runs shortcodes via a direct `do_shortcode()` call on its own
-  saved text, bypassing the `the_content` filter chain entirely. Not a bug
-  in this plugin — documented as a placement constraint (use a Text module,
-  or the block/classic editor body, instead).
-- Added maximum-width and alignment settings. Collapsed (toggle view, list
-  hidden) now shrinks to fit just the label and toggle icon rather than
-  sitting at the full expanded width; expanded width defaults to 250px via
-  the new setting. Alignment adds none/left/right/centre.
-- Found in further live testing: the placeholder stayed unreplaced in a
-  Divi Text module too, not just Code. Root cause confirmed (with an
-  opus-advisor second opinion) — Divi 5 renders its whole module tree
-  through its own pipeline, calling `do_shortcode()` per module field
-  directly; the assembled HTML never passes through `apply_filters(
-  'the_content', ...)`, so nothing hooked there can ever see it, on any
-  module. Added a full-page output-buffer fallback (`template_redirect`
-  + `ob_start`), scoped to the post's own content wrapper (tries
-  `#post-{ID}` first, then a couple of Divi-specific classes) so header/
-  nav/footer/sidebar headings can't leak into the list. The `the_content`
-  filter stays as the fast path for non-builder content.
+Text-scale values (indent, line height, item spacing) are in em; block and viewport
+dimensions (maximum width, scroll offset) are in px.

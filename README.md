@@ -17,16 +17,28 @@ Built for Divi 5.
   - Header label text, and whether to show it
   - Toggle view (collapsible), and whether it starts collapsed
   - Which heading levels (H2–H6) are included
-  - Heading size scale ratio and per-level indent for nested items
-  - Maximum width when expanded (shrinks to fit the label and toggle icon when
-    collapsed, if toggle view is on)
-  - Alignment: none, left, right, or centre
+  - Heading size scale ratio, and per-level indent for nested items (em)
+  - Line height and space between items (em)
+  - Maximum width when expanded, in px (shrinks to fit the label and toggle icon
+    when collapsed, if toggle view is on)
+  - Alignment: left, right, or centre
+  - Float — whether content flows around the block or it sits on its own line
+    above what follows (left/right only; centre never floats)
   - List markers: none, bullets, or numbers
+  - Scroll offset in px, so a clicked link doesn't land the heading underneath a
+    fixed header bar
   - Colours for background, text, links, hover, and border
+
+Text-scale values (indent, line height, item spacing) are in em so they track the
+surrounding font size. Block and viewport dimensions — maximum width and scroll
+offset — stay in px.
 - With toggle view on, the whole top of the block expands and collapses it, with
   a rotating chevron and a short animation (respects `prefers-reduced-motion`)
 - Adds anchor IDs to headings that don't already have one, without colliding with
   IDs already used on the page
+- The scroll offset is applied as `scroll-margin-top` on the headings rather than
+  by intercepting clicks, so it also covers arriving on a `#hash` link directly
+  and browser back/forward
 - Outputs `ItemList` schema.org JSON-LD for the generated list
 
 ## Usage
