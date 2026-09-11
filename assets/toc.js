@@ -117,16 +117,20 @@
 			return;
 		}
 
-		// Left/right float so surrounding content flows around the block
-		// rather than starting below it. The z-index on .wp-toc below is what
-		// keeps a floated block clickable — without it the theme's own
-		// stacking swallowed clicks on the header, which looked like the
-		// block refusing to expand.
+		// Floating left/right lets the content flow around the block; without
+		// it the block sits on its own line above what follows. Centre never
+		// floats. The z-index on .wp-toc below is what keeps a floated block
+		// clickable — without it the theme's own stacking swallowed clicks on
+		// the header, which looked like the block refusing to expand.
 		var align = '';
 		if ( 'left' === s.align ) {
-			align = '.wp-toc--align-left{float:left;margin:0 1.5em 1em 0;}';
+			align = s.floatBlock
+				? '.wp-toc--align-left{float:left;margin:0 1.5em 1em 0;}'
+				: '.wp-toc--align-left{margin:0 auto 1em 0;}';
 		} else if ( 'right' === s.align ) {
-			align = '.wp-toc--align-right{float:right;margin:0 0 1em 1.5em;}';
+			align = s.floatBlock
+				? '.wp-toc--align-right{float:right;margin:0 0 1em 1.5em;}'
+				: '.wp-toc--align-right{margin:0 0 1em auto;}';
 		} else if ( 'center' === s.align ) {
 			align = '.wp-toc--align-center{margin:0 auto 1em;}';
 		}
@@ -153,7 +157,16 @@
 				'{list-style:none !important;padding:0 !important;}';
 		}
 
+		// scroll-margin-top on the headings themselves, rather than
+		// intercepting link clicks: this also covers arriving on a #hash
+		// directly and browser back/forward, which a click handler misses.
+		var offset =
+			s.scrollOffset > 0
+				? '.wp-toc-heading{scroll-margin-top:' + s.scrollOffset + 'px;}'
+				: '';
+
 		var css =
+			offset +
 			// position/z-index so nothing in the theme can overlay the block
 			// and swallow clicks on the header.
 			'.wp-toc{background:' + s.colors.bg + ';color:' + s.colors.text +
@@ -194,7 +207,7 @@
 
 			markers +
 			'.wp-toc .wp-toc__list{margin:0;}' +
-			'.wp-toc .wp-toc__list li{line-height:1.3em;margin-bottom:10px;}' +
+			'.wp-toc .wp-toc__list li{line-height:' + s.lineHeight + 'em;margin-bottom:' + s.itemSpacing + 'px;}' +
 			'.wp-toc:not(.is-collapsed) .wp-toc__list{margin-top:.75em;}' +
 			'.wp-toc .wp-toc__list ul,.wp-toc .wp-toc__list ol' +
 			'{font-size:calc(' + s.scale + ' * 1em);margin-left:' + s.indent + 'px !important;}' +
@@ -426,6 +439,10 @@
 				heading.id = id;
 			}
 
+			// Carries the scroll offset, so a jump doesn't land the heading
+			// underneath a fixed header bar.
+			heading.classList.add( 'wp-toc-heading' );
+
 			flat.push( { level: parseInt( heading.nodeName.substring( 1 ), 10 ), id: id, text: text } );
 		} );
 
@@ -435,11 +452,7 @@
 
 		injectCss( s );
 
-		var tree = s.nested
-			? buildTree( flat )
-			: flat.map( function ( item ) {
-				return { id: item.id, text: item.text, children: [] };
-			} );
+		var tree = buildTree( flat );
 
 		var navs = [];
 		Array.prototype.forEach.call( mounts, function ( mount, i ) {

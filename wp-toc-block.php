@@ -66,9 +66,12 @@ function wp_toc_defaults() {
 		'scale_ratio'     => 0.9,
 		'indent_px'       => 16,
 		'max_width'       => 250,
-		'alignment'       => 'none',
+		'alignment'       => 'left',
+		'float_block'     => true,
 		'list_type'       => 'none',
-		'nested_list'     => true,
+		'line_height'     => 1.3,
+		'item_spacing'    => 10,
+		'scroll_offset'   => 0,
 		'color_bg'        => '#eaeaea',
 		'color_text'      => '#1e1e1e',
 		'color_link'      => '#1e1e1e',
@@ -87,7 +90,15 @@ function wp_toc_get_settings() {
 	if ( ! is_array( $saved ) ) {
 		$saved = array();
 	}
-	return wp_parse_args( $saved, wp_toc_defaults() );
+	$settings = wp_parse_args( $saved, wp_toc_defaults() );
+
+	// "none" was dropped as an alignment — it did the same thing as left.
+	// Anything still holding it reads as left rather than as no alignment.
+	if ( 'none' === $settings['alignment'] ) {
+		$settings['alignment'] = 'left';
+	}
+
+	return $settings;
 }
 
 add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'wp_toc_action_links' );
@@ -151,7 +162,7 @@ function wp_toc_sanitize_settings( $input ) {
 		$out['min_words'] = absint( $input['min_words'] );
 	}
 
-	$out['nested_list']      = ! empty( $input['nested_list'] );
+	$out['float_block']      = ! empty( $input['float_block'] );
 	$out['show_label']       = ! empty( $input['show_label'] );
 	$out['label_text']       = isset( $input['label_text'] ) ? sanitize_text_field( $input['label_text'] ) : $defaults['label_text'];
 	$out['toggle_view']      = ! empty( $input['toggle_view'] );
@@ -183,9 +194,20 @@ function wp_toc_sanitize_settings( $input ) {
 	}
 
 	if ( isset( $input['alignment'] ) ) {
-		$out['alignment'] = in_array( $input['alignment'], array( 'none', 'left', 'right', 'center' ), true )
+		$out['alignment'] = in_array( $input['alignment'], array( 'left', 'right', 'center' ), true )
 			? $input['alignment']
 			: $defaults['alignment'];
+	}
+
+	if ( isset( $input['line_height'] ) ) {
+		$line_height         = (float) $input['line_height'];
+		$out['line_height']  = $line_height > 0 ? $line_height : $defaults['line_height'];
+	}
+	if ( isset( $input['item_spacing'] ) ) {
+		$out['item_spacing'] = absint( $input['item_spacing'] );
+	}
+	if ( isset( $input['scroll_offset'] ) ) {
+		$out['scroll_offset'] = absint( $input['scroll_offset'] );
 	}
 
 	if ( isset( $input['list_type'] ) ) {
@@ -213,7 +235,13 @@ function wp_toc_admin_assets( $hook ) {
 	wp_enqueue_script( 'wp-color-picker' );
 	wp_add_inline_script(
 		'wp-color-picker',
-		'jQuery(function($){ $(".wp-toc-color").wpColorPicker(); });'
+		'jQuery(function($){' .
+			'$(".wp-toc-color").wpColorPicker();' .
+			// Floating only means anything for left/right — centre never floats.
+			'var a=$("#toc-alignment"),r=$(".toc-float-row");' .
+			'function t(){r.toggle("left"===a.val()||"right"===a.val());}' .
+			't();a.on("change",t);' .
+		'});'
 	);
 }
 
@@ -302,6 +330,24 @@ function wp_toc_render_settings_page() {
 					<td><input name="<?php echo $opt; ?>[indent_px]" id="toc-indent" type="number" min="0" step="1" value="<?php echo esc_attr( $s['indent_px'] ); ?>" class="small-text"></td>
 				</tr>
 				<tr>
+					<th scope="row"><label for="toc-line-height"><?php esc_html_e( 'Line height', 'wp-toc-block' ); ?></label></th>
+					<td>
+						<input name="<?php echo $opt; ?>[line_height]" id="toc-line-height" type="number" min="0.5" step="0.05" value="<?php echo esc_attr( $s['line_height'] ); ?>" class="small-text">
+						<p class="description"><?php esc_html_e( 'Line height of each list item, in em.', 'wp-toc-block' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="toc-item-spacing"><?php esc_html_e( 'Space between items (px)', 'wp-toc-block' ); ?></label></th>
+					<td><input name="<?php echo $opt; ?>[item_spacing]" id="toc-item-spacing" type="number" min="0" step="1" value="<?php echo esc_attr( $s['item_spacing'] ); ?>" class="small-text"></td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="toc-scroll-offset"><?php esc_html_e( 'Scroll offset (px)', 'wp-toc-block' ); ?></label></th>
+					<td>
+						<input name="<?php echo $opt; ?>[scroll_offset]" id="toc-scroll-offset" type="number" min="0" step="1" value="<?php echo esc_attr( $s['scroll_offset'] ); ?>" class="small-text">
+						<p class="description"><?php esc_html_e( 'Stops the heading landing underneath a fixed header bar when a link is clicked. Set it to roughly the height of that bar.', 'wp-toc-block' ); ?></p>
+					</td>
+				</tr>
+				<tr>
 					<th scope="row"><label for="toc-max-width"><?php esc_html_e( 'Maximum width (px)', 'wp-toc-block' ); ?></label></th>
 					<td>
 						<input name="<?php echo $opt; ?>[max_width]" id="toc-max-width" type="number" min="1" step="1" value="<?php echo esc_attr( $s['max_width'] ); ?>" class="small-text">
@@ -314,9 +360,8 @@ function wp_toc_render_settings_page() {
 						<select name="<?php echo $opt; ?>[alignment]" id="toc-alignment">
 							<?php
 							$alignments = array(
-								'none'   => __( 'None (full width, up to the maximum)', 'wp-toc-block' ),
-								'left'   => __( 'Left (content flows around it)', 'wp-toc-block' ),
-								'right'  => __( 'Right (content flows around it)', 'wp-toc-block' ),
+								'left'   => __( 'Left', 'wp-toc-block' ),
+								'right'  => __( 'Right', 'wp-toc-block' ),
 								'center' => __( 'Centre', 'wp-toc-block' ),
 							);
 							foreach ( $alignments as $value => $label ) :
@@ -326,14 +371,14 @@ function wp_toc_render_settings_page() {
 						</select>
 					</td>
 				</tr>
-				<tr>
-					<th scope="row"><?php esc_html_e( 'Nested list', 'wp-toc-block' ); ?></th>
+				<tr class="toc-float-row">
+					<th scope="row"><?php esc_html_e( 'Float', 'wp-toc-block' ); ?></th>
 					<td>
 						<label>
-							<input type="checkbox" name="<?php echo $opt; ?>[nested_list]" value="1" <?php checked( $s['nested_list'] ); ?>>
-							<?php esc_html_e( 'Indent sub-headings under their parent heading', 'wp-toc-block' ); ?>
+							<input type="checkbox" name="<?php echo $opt; ?>[float_block]" value="1" <?php checked( $s['float_block'] ); ?>>
+							<?php esc_html_e( 'Let the content flow around the block', 'wp-toc-block' ); ?>
 						</label>
-						<p class="description"><?php esc_html_e( 'Unchecked lists every heading at the same level.', 'wp-toc-block' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Unchecked places the block on its own line, above the content that follows it. Centre alignment never floats.', 'wp-toc-block' ); ?></p>
 					</td>
 				</tr>
 				<tr>
@@ -413,8 +458,11 @@ function wp_toc_shortcode( $atts ) {
 		'indent'      => (int) $s['indent_px'],
 		'maxWidth'    => (int) $s['max_width'],
 		'align'       => $s['alignment'],
+		'floatBlock'  => (bool) $s['float_block'],
 		'listType'    => $s['list_type'],
-		'nested'      => (bool) $s['nested_list'],
+		'lineHeight'  => (float) $s['line_height'],
+		'itemSpacing' => (int) $s['item_spacing'],
+		'scrollOffset' => (int) $s['scroll_offset'],
 		'colors'      => array(
 			'bg'        => $s['color_bg'],
 			'text'      => $s['color_text'],
