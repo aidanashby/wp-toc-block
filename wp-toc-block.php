@@ -539,11 +539,14 @@ function wp_toc_process_content( $content ) {
 
 add_action( 'template_redirect', 'wp_toc_maybe_buffer' );
 function wp_toc_maybe_buffer() {
-	// Emergency kill switch: put
-	//   define( 'WP_TOC_DISABLE_BUFFER', true );
-	// in wp-config.php to switch the whole-page pass off without
-	// deactivating the plugin or touching this file.
-	if ( defined( 'WP_TOC_DISABLE_BUFFER' ) && WP_TOC_DISABLE_BUFFER ) {
+	// OFF by default. This pass parses the entire page into a DOMDocument,
+	// which on a large builder-generated page can cost many times the
+	// page's size in memory — and memory exhaustion is a fatal that
+	// try/catch cannot catch, taking the whole page down with it. That is
+	// a catastrophic failure mode for what is only a navigation aid, so it
+	// is opt-in:
+	//   define( 'WP_TOC_ENABLE_BUFFER', true );
+	if ( ! defined( 'WP_TOC_ENABLE_BUFFER' ) || ! WP_TOC_ENABLE_BUFFER ) {
 		return;
 	}
 	if ( is_admin() || is_feed() || ! is_singular() || ! is_main_query() ) {
@@ -635,6 +638,9 @@ function wp_toc_process_buffer( $buffer ) {
 	try {
 		return wp_toc_process_buffer_inner( $buffer );
 	} catch ( \Throwable $e ) {
+		// Also to the PHP error log, so the cause is recoverable even when
+		// the page itself renders nothing.
+		error_log( '[wp-toc-block] buffer failed: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine() );
 		$msg = wp_json_encode(
 			array(
 				'stage' => 'buffer-fatal',
