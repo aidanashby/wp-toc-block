@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Fixed the actual bug: the guessed content-wrapper class names
+  (`et_builder_inner_content`, `entry-content`, `et-l--post`) didn't match
+  anything on this site, so the buffer fallback marked all real headings
+  "out of scope" and correctly-but-uselessly stripped the placeholder to
+  empty. Confirmed via debug console output, then the real class —
+  `et_pb_post_content` (Divi 5's actual "Post Content" module wrapper on
+  this site) — given directly by the site owner. Plugin targets this
+  theme only, so the generic guesses were dropped rather than kept as
+  fallbacks.
+
 - Initial build: `[toc]` shortcode, settings page, heading scan with anchor
   assignment, nested list rendering, colour/scale/indent settings, toggle
   view, `ItemList` schema.org JSON-LD.

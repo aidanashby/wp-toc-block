@@ -557,11 +557,13 @@ function wp_toc_maybe_buffer() {
  */
 function wp_toc_find_scope_node( DOMDocument $dom, $post_id ) {
 	$xpath      = new DOMXPath( $dom );
+	// et_pb_post_content is Divi 5's actual "Post Content" dynamic-content
+	// module wrapper on this site — confirmed by inspecting the rendered
+	// page, not guessed. #post-{ID} kept as a generic fallback in case a
+	// post ever renders without that module (e.g. a non-builder page).
 	$candidates = array(
+		'//*[contains(concat(" ", normalize-space(@class), " "), " et_pb_post_content ")]',
 		'//*[@id="post-' . (int) $post_id . '"]',
-		'//*[contains(@class,"et_builder_inner_content")]',
-		'//*[contains(@class,"entry-content")]',
-		'//*[contains(@class,"et-l--post")]',
 	);
 	foreach ( $candidates as $query ) {
 		$nodes = $xpath->query( $query );
