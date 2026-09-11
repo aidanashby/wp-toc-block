@@ -20,7 +20,6 @@ define( 'WP_TOC_VERSION', '0.1.0' );
 define( 'WP_TOC_FILE', __FILE__ );
 define( 'WP_TOC_URL', plugin_dir_url( __FILE__ ) );
 define( 'WP_TOC_OPTION', 'wp_toc_settings' );
-define( 'WP_TOC_PLACEHOLDER', '<!--WP_TOC_PLACEHOLDER-->' );
 
 /**
  * GitHub-based update checker. Harmless before any tagged release exists.
@@ -56,6 +55,7 @@ function wp_toc_init_updater() {
  */
 function wp_toc_defaults() {
 	return array(
+		'scope_selector'  => '.et_pb_post_content',
 		'min_headings'    => 2,
 		'min_words'       => 0,
 		'show_label'      => true,
@@ -135,6 +135,11 @@ function wp_toc_sanitize_settings( $input ) {
 
 	if ( ! is_array( $input ) ) {
 		return $out;
+	}
+
+	if ( isset( $input['scope_selector'] ) ) {
+		$selector               = sanitize_text_field( $input['scope_selector'] );
+		$out['scope_selector']  = '' !== $selector ? $selector : $defaults['scope_selector'];
 	}
 
 	if ( isset( $input['min_headings'] ) ) {
@@ -219,6 +224,13 @@ function wp_toc_render_settings_page() {
 
 			<h2><?php esc_html_e( 'When it appears', 'wp-toc-block' ); ?></h2>
 			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><label for="toc-scope"><?php esc_html_e( 'Content container selector', 'wp-toc-block' ); ?></label></th>
+					<td>
+						<input name="<?php echo $opt; ?>[scope_selector]" id="toc-scope" type="text" value="<?php echo esc_attr( $s['scope_selector'] ); ?>" class="regular-text code">
+						<p class="description"><?php esc_html_e( 'CSS selector for the element holding the post content. Only headings inside it are listed, which keeps site header, menu and footer headings out. Default suits Divi 5\'s Post Content module.', 'wp-toc-block' ); ?></p>
+					</td>
+				</tr>
 				<tr>
 					<th scope="row"><label for="toc-min-headings"><?php esc_html_e( 'Minimum headings to display', 'wp-toc-block' ); ?></label></th>
 					<td><input name="<?php echo $opt; ?>[min_headings]" id="toc-min-headings" type="number" min="1" step="1" value="<?php echo esc_attr( $s['min_headings'] ); ?>" class="small-text"></td>
@@ -333,564 +345,60 @@ function wp_toc_render_settings_page() {
 }
 
 /* -------------------------------------------------------------------------
- * Shortcode: drop a placeholder. The real work happens in the
- * the_content filter below, once per page, after everything else
- * (including Divi's own rendering) has already run.
+ * Front end.
+ *
+ * The table of contents is built in the browser, not in PHP. Divi 5 renders
+ * its module tree through its own pipeline and never feeds the assembled
+ * HTML back through the_content, so there is no server-side filter that
+ * reliably sees the finished markup. Parsing the whole page server-side to
+ * work around that was tried and rejected: a failure there (memory
+ * exhaustion in particular, which try/catch cannot catch) takes the entire
+ * page down, which is an absurd risk for a navigation aid.
+ *
+ * So PHP only emits a mount element carrying the settings. toc.js finds the
+ * headings in the already-rendered DOM, where it does not matter how Divi
+ * assembled them. Worst case is no table of contents.
  * ---------------------------------------------------------------------- */
 
 add_shortcode( 'toc', 'wp_toc_shortcode' );
 function wp_toc_shortcode( $atts ) {
-	// DEBUG: a plain visible marker (not a comment, so it survives even if
-	// something strips HTML comments) that always renders regardless of
-	// settings — confirms the shortcode callback itself actually ran.
-	// Remove once the Divi rendering issue is diagnosed.
-	return '[wp-toc-block: shortcode ran]' . WP_TOC_PLACEHOLDER;
-}
+	$s = wp_toc_get_settings();
 
-/* -------------------------------------------------------------------------
- * Pure helpers (tree building, ID dedup, list rendering) live in
- * toc-pure-functions.php, with no WordPress dependency, so test-toc.php
- * can exercise them standalone: php test-toc.php
- * ---------------------------------------------------------------------- */
-
-require_once __DIR__ . '/toc-pure-functions.php';
-
-/* -------------------------------------------------------------------------
- * The real work: one the_content pass, after everything else has rendered.
- * ---------------------------------------------------------------------- */
-
-/**
- * Read-only heading scan shared by both the the_content fast path and the
- * full-page buffer fallback below. Returns one entry per matched heading,
- * in document order, including empty ones (marked skip) — wp_toc_inject_ids()
- * needs this exact 1:1 alignment with the <h{level}> tags it finds by regex
- * in the same $html string, or every heading after a skipped one gets the
- * wrong id.
- *
- * $scope_node, if given, additionally marks any heading that isn't a
- * descendant of it as skip — used by the buffer fallback to keep header/
- * nav/footer/sidebar headings out of the list.
- *
- * @param string $html
- * @param array  $levels
- * @return array [ $flat_all, $dom ] — $dom is the parsed DOMDocument, so
- *               callers needing scope detection (the buffer fallback) can
- *               reuse it instead of parsing twice.
- */
-function wp_toc_scan_headings( $html, array $levels ) {
-	$tags = array_map(
-		function ( $l ) {
-			return 'h' . $l;
-		},
-		$levels
+	$config = array(
+		'scope'       => $s['scope_selector'],
+		'levels'      => array_map( 'intval', $s['heading_levels'] ),
+		'minHeadings' => (int) $s['min_headings'],
+		'minWords'    => (int) $s['min_words'],
+		'showLabel'   => (bool) $s['show_label'],
+		'labelText'   => $s['label_text'],
+		'toggle'      => (bool) $s['toggle_view'],
+		'startHidden' => (bool) $s['initially_hidden'],
+		'scale'       => (float) $s['scale_ratio'],
+		'indent'      => (int) $s['indent_px'],
+		'maxWidth'    => (int) $s['max_width'],
+		'align'       => $s['alignment'],
+		'colors'      => array(
+			'bg'        => $s['color_bg'],
+			'text'      => $s['color_text'],
+			'link'      => $s['color_link'],
+			'linkHover' => $s['color_link_hover'],
+			'border'    => $s['color_border'],
+		),
 	);
 
-	// Read-only scan for heading text/existing IDs. We deliberately never
-	// write back DOMDocument's own HTML serialization — Divi and other
-	// builders emit markup (inline SVGs, self-closing quirks, data
-	// attributes) that DOMDocument's save routines are known to subtly
-	// rewrite. Anchor IDs are injected with a targeted regex instead
-	// (wp_toc_inject_ids), so everything else in $html stays byte-identical.
-	libxml_use_internal_errors( true );
-	$dom = new DOMDocument();
-	// The XML PI forces UTF-8 interpretation without adding a visible node;
-	// NOIMPLIED/NODEFDTD stop libxml wrapping the fragment in <html><body>.
-	$dom->loadHTML( '<?xml encoding="utf-8" ?>' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD );
-	libxml_clear_errors();
-
-	$xpath    = new DOMXPath( $dom );
-	$query    = '//' . implode( '|//', $tags );
-	$headings = $xpath->query( $query );
-
-	$flat_all = array();
-	if ( $headings ) {
-		foreach ( $headings as $heading ) {
-			$text        = trim( $heading->textContent );
-			$existing_id = $heading->getAttribute( 'id' );
-			$flat_all[]  = array(
-				'level'  => (int) substr( $heading->nodeName, 1 ),
-				'text'   => $text,
-				'has_id' => ( '' !== $existing_id ),
-				'id'     => ( '' !== $existing_id ) ? $existing_id : null,
-				'skip'   => ( '' === $text ),
-				'node'   => $heading,
-			);
-		}
-	}
-
-	$used_ids = array();
-	foreach ( $flat_all as &$item ) {
-		if ( $item['skip'] ) {
-			continue;
-		}
-		if ( $item['has_id'] ) {
-			$used_ids[ $item['id'] ] = true;
-		} else {
-			$item['id'] = wp_toc_unique_id( $item['text'], $used_ids, 'sanitize_title' );
-		}
-	}
-	unset( $item );
-
-	return array( $flat_all, $dom );
+	return '<div class="wp-toc-mount" data-wp-toc="' . esc_attr( wp_json_encode( $config ) ) . '"></div>';
 }
 
 /**
- * Shared final step: gate on min heading count, inject ids, build the
- * tree, register schema/CSS/JS, and replace every placeholder occurrence
- * in $content — fresh per occurrence, not one shared string, so multiple
- * [toc] instances get distinct ids instead of duplicate ones (which would
- * break toggle_view's aria-controls).
- *
- * @param string $content
- * @param array  $levels
- * @param array  $flat_all From wp_toc_scan_headings() (the 'node' key is dropped here).
- * @param array  $settings
- * @return string
+ * Enqueued on every front-end view rather than from the shortcode
+ * callback: Divi renders modules through its own pipeline, so the callback
+ * can't be relied on to run before scripts are printed. The script exits
+ * immediately when there's no mount element on the page.
  */
-function wp_toc_finish( $content, array $levels, array $flat_all, array $settings ) {
-	$flat = array_values(
-		array_filter(
-			$flat_all,
-			function ( $i ) {
-				return ! $i['skip'];
-			}
-		)
-	);
-
-	if ( count( $flat ) < $settings['min_headings'] ) {
-		return str_replace( WP_TOC_PLACEHOLDER, '', $content );
-	}
-
-	$content_with_ids = wp_toc_inject_ids( $content, $levels, $flat_all );
-	$tree             = wp_toc_build_tree( $flat );
-
-	wp_toc_register_schema( $flat );
-	wp_toc_mark_css_needed();
-	if ( $settings['toggle_view'] ) {
-		wp_enqueue_script( 'wp-toc-block' );
-	}
-
-	return preg_replace_callback(
-		'/' . preg_quote( WP_TOC_PLACEHOLDER, '/' ) . '/',
-		function () use ( $tree, $settings ) {
-			return wp_toc_render_toc( $tree, $settings );
-		},
-		$content_with_ids
-	);
-}
-
-add_filter( 'the_content', 'wp_toc_process_content', PHP_INT_MAX );
-function wp_toc_process_content( $content ) {
-	if ( false === strpos( $content, WP_TOC_PLACEHOLDER ) ) {
-		return $content;
-	}
-
-	static $processed_post_id = null;
-
-	// Only the queried singular post, not an archive/feed listing, and not
-	// a secondary loop (e.g. a "related posts" section) rendering other
-	// posts' content while the main query is still singular — is_singular()
-	// and is_main_query() alone stay true throughout that inner loop too,
-	// since they describe the main query, not whichever post is currently
-	// being echoed. Also never run twice for the same post in one request,
-	// whatever triggers the repeat call.
-	if (
-		is_feed() || ! is_singular() || ! is_main_query()
-		|| get_the_ID() !== get_queried_object_id()
-		|| get_the_ID() === $processed_post_id
-	) {
-		return str_replace( WP_TOC_PLACEHOLDER, '', $content );
-	}
-
-	$settings = wp_toc_get_settings();
-
-	if ( $settings['min_words'] > 0 && str_word_count( wp_strip_all_tags( $content ) ) < $settings['min_words'] ) {
-		return str_replace( WP_TOC_PLACEHOLDER, '', $content );
-	}
-
-	$levels            = $settings['heading_levels'];
-	$processed_post_id = get_the_ID();
-
-	// Never let a failure here break the content around it — fall back to
-	// the original content with the placeholder removed.
-	try {
-		list( $flat_all ) = wp_toc_scan_headings( $content, $levels );
-		return wp_toc_finish( $content, $levels, $flat_all, $settings );
-	} catch ( \Throwable $e ) {
-		return str_replace( WP_TOC_PLACEHOLDER, '', $content );
-	}
-}
-
-/* -------------------------------------------------------------------------
- * Fallback: full-page output buffer.
- *
- * Confirmed by live testing (not theory): a [toc] placed in a Divi Code
- * module, then a Divi Text module, both produced an unreplaced placeholder
- * even with the_content hooked at PHP_INT_MAX. Divi 5 renders its module
- * tree through its own pipeline and calls do_shortcode() per module field
- * directly — the assembled HTML never gets fed back through
- * apply_filters('the_content', ...), so nothing hooked there can ever see
- * it. This buffers the entire page and does the same job on it directly.
- *
- * Only ever does anything if a placeholder survived the_content's pass —
- * on ordinary WP content that already worked, this is a single strpos()
- * check and nothing else.
- * ---------------------------------------------------------------------- */
-
-add_action( 'template_redirect', 'wp_toc_maybe_buffer' );
-function wp_toc_maybe_buffer() {
-	// OFF by default. This pass parses the entire page into a DOMDocument,
-	// which on a large builder-generated page can cost many times the
-	// page's size in memory — and memory exhaustion is a fatal that
-	// try/catch cannot catch, taking the whole page down with it. That is
-	// a catastrophic failure mode for what is only a navigation aid, so it
-	// is opt-in:
-	//   define( 'WP_TOC_ENABLE_BUFFER', true );
-	if ( ! defined( 'WP_TOC_ENABLE_BUFFER' ) || ! WP_TOC_ENABLE_BUFFER ) {
+add_action( 'wp_enqueue_scripts', 'wp_toc_enqueue' );
+function wp_toc_enqueue() {
+	if ( is_admin() ) {
 		return;
 	}
-	if ( is_admin() || is_feed() || ! is_singular() || ! is_main_query() ) {
-		return;
-	}
-	ob_start( 'wp_toc_process_buffer' );
+	wp_enqueue_script( 'wp-toc-block', WP_TOC_URL . 'assets/toc.js', array(), WP_TOC_VERSION, true );
 }
-
-/**
- * Find the element that wraps this post's own content, so the heading
- * scan can be scoped to it — otherwise a full-page scan would pick up
- * heading tags from the site header, nav, footer, or sidebar widgets.
- * Tries WordPress core's own `id="post-{ID}"` convention first (near-
- * universal regardless of builder), then a couple of Divi-specific
- * fallbacks. Returns null if none match — callers fall back to treating
- * the whole page as in-scope, which is safe but may pick up stray
- * headings from elsewhere on the page.
- *
- * @param DOMDocument $dom
- * @param int         $post_id
- * @return DOMNode|null
- */
-function wp_toc_find_scope_node( DOMDocument $dom, $post_id ) {
-	$xpath      = new DOMXPath( $dom );
-	// et_pb_post_content is Divi 5's actual "Post Content" dynamic-content
-	// module wrapper on this site — confirmed by inspecting the rendered
-	// page, not guessed. #post-{ID} kept as a generic fallback in case a
-	// post ever renders without that module (e.g. a non-builder page).
-	$candidates = array(
-		'//*[contains(concat(" ", normalize-space(@class), " "), " et_pb_post_content ")]',
-		'//*[@id="post-' . (int) $post_id . '"]',
-	);
-	foreach ( $candidates as $query ) {
-		$nodes = $xpath->query( $query );
-		if ( $nodes && $nodes->length > 0 ) {
-			return $nodes->item( 0 );
-		}
-	}
-	return null;
-}
-
-/**
- * @param DOMNode $ancestor
- * @param DOMNode $node
- * @return bool
- */
-function wp_toc_node_is_within( DOMNode $ancestor, DOMNode $node ) {
-	while ( $node ) {
-		if ( $node === $ancestor ) {
-			return true;
-		}
-		$node = $node->parentNode;
-	}
-	return false;
-}
-
-/**
- * DEBUG: append a console.log of diagnostic data to $html, right before
- * </body> if present, else at the end. Remove this whole function (and
- * its call sites) once the Divi rendering issue is diagnosed.
- *
- * @param string $html
- * @param array  $data
- * @return string
- */
-function wp_toc_append_debug( $html, array $data ) {
-	$script = '<script>console.log("[wp-toc-block]", ' . wp_json_encode( $data ) . ');</script>';
-	return ( false !== strpos( $html, '</body>' ) )
-		? str_replace( '</body>', $script . '</body>', $html )
-		: $html . $script;
-}
-
-/**
- * @param string $buffer
- * @return string
- */
-/**
- * Modifying the entire page's output in one pass carries a bigger blast
- * radius than a normal content filter: a bug here can take down the whole
- * page, not just this feature. Never let that happen — on any exception,
- * fall back to the completely untouched original $buffer, and surface the
- * error via a plain, dependency-free console.log rather than any of our
- * own helpers (in case one of those is what's broken).
- *
- * @param string $buffer
- * @return string
- */
-function wp_toc_process_buffer( $buffer ) {
-	try {
-		return wp_toc_process_buffer_inner( $buffer );
-	} catch ( \Throwable $e ) {
-		// Also to the PHP error log, so the cause is recoverable even when
-		// the page itself renders nothing.
-		error_log( '[wp-toc-block] buffer failed: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine() );
-		$msg = wp_json_encode(
-			array(
-				'stage' => 'buffer-fatal',
-				'error' => $e->getMessage(),
-				'file'  => basename( $e->getFile() ),
-				'line'  => $e->getLine(),
-			)
-		);
-		$script = '<script>console.error("[wp-toc-block]", ' . $msg . ');</script>';
-		return ( false !== strpos( $buffer, '</body>' ) )
-			? str_replace( '</body>', $script . '</body>', $buffer )
-			: $buffer . $script;
-	}
-}
-
-/**
- * @param string $buffer
- * @return string
- */
-function wp_toc_process_buffer_inner( $buffer ) {
-	// DEBUG: dump what this pass actually found into the browser console —
-	// remove once the Divi rendering issue is diagnosed.
-	$debug = array( 'stage' => 'buffer', 'post_id' => get_queried_object_id() );
-
-	if ( false === strpos( $buffer, WP_TOC_PLACEHOLDER ) ) {
-		$debug['placeholder_found_in_buffer'] = false;
-		return wp_toc_append_debug( $buffer, $debug );
-	}
-	$debug['placeholder_found_in_buffer'] = true;
-
-	$settings = wp_toc_get_settings();
-	$levels   = $settings['heading_levels'];
-
-	list( $flat_all, $dom ) = wp_toc_scan_headings( $buffer, $levels );
-	$scope_node              = wp_toc_find_scope_node( $dom, get_queried_object_id() );
-
-	$debug['heading_levels_setting']  = $levels;
-	$debug['headings_found_total']    = count( $flat_all );
-	$debug['scope_node_found']        = (bool) $scope_node;
-	$debug['scope_node_tag_class']    = $scope_node ? ( $scope_node->nodeName . '.' . $scope_node->getAttribute( 'class' ) ) : null;
-
-	if ( $scope_node ) {
-		foreach ( $flat_all as &$item ) {
-			if ( ! $item['skip'] && ! wp_toc_node_is_within( $scope_node, $item['node'] ) ) {
-				$item['skip'] = true;
-			}
-		}
-		unset( $item );
-	}
-
-	$in_scope_count             = count(
-		array_filter(
-			$flat_all,
-			function ( $i ) {
-				return ! $i['skip'];
-			}
-		)
-	);
-	$debug['headings_in_scope_after_skip'] = $in_scope_count;
-	$debug['min_headings_setting']          = $settings['min_headings'];
-
-	// Word count from the scoped content only, if we found it — otherwise
-	// the whole page's nav/footer text would inflate the count.
-	$word_count_source = $scope_node ? $scope_node->textContent : wp_strip_all_tags( $buffer );
-	$debug['min_words_setting'] = $settings['min_words'];
-	$debug['word_count_found']  = str_word_count( $word_count_source );
-
-	if ( $settings['min_words'] > 0 && str_word_count( $word_count_source ) < $settings['min_words'] ) {
-		$debug['verdict'] = 'stripped: below min_words';
-		return wp_toc_append_debug( str_replace( WP_TOC_PLACEHOLDER, '', $buffer ), $debug );
-	}
-
-	if ( $in_scope_count < $settings['min_headings'] ) {
-		$debug['verdict'] = 'stripped: below min_headings (check scope_node_found/tag_class above — a wrong or too-narrow scope match is the likely cause if headings_found_total > 0 but headings_in_scope_after_skip is much lower)';
-	} else {
-		$debug['verdict'] = 'rendered';
-	}
-
-	$result = wp_toc_finish( $buffer, $levels, $flat_all, $settings );
-
-	// wp_footer already ran by the time this callback fires (output
-	// buffering only flushes once the whole page, footer included, has
-	// been generated) — so the usual wp_footer-hooked CSS/JS from
-	// wp_toc_finish() never gets printed. Inject it directly here instead.
-	global $wp_toc_css_needed;
-	if ( ! empty( $wp_toc_css_needed ) ) {
-		$extra = wp_toc_css_string( $settings ) . wp_toc_schema_string();
-		if ( $settings['toggle_view'] ) {
-			$extra .= '<script src="' . esc_url( WP_TOC_URL . 'assets/toc.js?ver=' . WP_TOC_VERSION ) . '" defer></script>';
-		}
-		$result = ( false !== strpos( $result, '</body>' ) )
-			? str_replace( '</body>', $extra . '</body>', $result )
-			: $result . $extra;
-	}
-
-	return wp_toc_append_debug( $result, $debug );
-}
-
-/**
- * Wrap the rendered list in the nav/header/toggle markup.
- *
- * @param array $tree
- * @param array $settings
- * @return string
- */
-function wp_toc_render_toc( array $tree, array $settings ) {
-	static $instance = 0;
-	$instance++;
-	$list_id = 'wp-toc-list-' . $instance;
-
-	$header = '';
-	if ( $settings['show_label'] || $settings['toggle_view'] ) {
-		$header .= '<div class="wp-toc__header">';
-		if ( $settings['show_label'] ) {
-			$header .= '<span class="wp-toc__label">' . esc_html( $settings['label_text'] ) . '</span>';
-		}
-		if ( $settings['toggle_view'] ) {
-			$expanded = $settings['initially_hidden'] ? 'false' : 'true';
-			$header  .= '<button type="button" class="wp-toc__toggle" aria-expanded="' . $expanded . '" aria-controls="' . esc_attr( $list_id ) . '">' . esc_html__( 'Toggle', 'wp-toc-block' ) . '</button>';
-		}
-		$header .= '</div>';
-	}
-
-	$collapsed   = ( $settings['toggle_view'] && $settings['initially_hidden'] );
-	$hidden_attr = $collapsed ? ' hidden' : '';
-
-	$list_html = wp_toc_render_tree( $tree );
-	// Tag the outer <ul> with our id/class without re-parsing it.
-	$list_html = preg_replace( '/^<ul>/', '<ul class="wp-toc__list" id="' . esc_attr( $list_id ) . '"' . $hidden_attr . '>', $list_html, 1 );
-
-	// is-collapsed is set server-side (not just added by JS on first click)
-	// so the page loads already at its shrink-to-fit width instead of
-	// flashing full-width-then-shrinking once JS runs.
-	$nav_class = 'wp-toc wp-toc--align-' . sanitize_html_class( $settings['alignment'] );
-	if ( $collapsed ) {
-		$nav_class .= ' is-collapsed';
-	}
-
-	return '<nav class="' . esc_attr( $nav_class ) . '" aria-label="' . esc_attr__( 'Table of contents', 'wp-toc-block' ) . '">' . $header . $list_html . '</nav>';
-}
-
-/* -------------------------------------------------------------------------
- * Schema.org ItemList JSON-LD — the correct type for an in-page TOC.
- * ---------------------------------------------------------------------- */
-
-function wp_toc_register_schema( array $flat ) {
-	global $wp_toc_schema_items;
-	if ( ! is_array( $wp_toc_schema_items ) ) {
-		$wp_toc_schema_items = array();
-	}
-	foreach ( $flat as $item ) {
-		$wp_toc_schema_items[] = array(
-			'@type' => 'ListItem',
-			'position' => count( $wp_toc_schema_items ) + 1,
-			'name'  => $item['text'],
-			'url'   => get_permalink() . '#' . $item['id'],
-		);
-	}
-}
-
-/**
- * @return string
- */
-function wp_toc_schema_string() {
-	global $wp_toc_schema_items;
-	if ( empty( $wp_toc_schema_items ) ) {
-		return '';
-	}
-	$schema = array(
-		'@context'        => 'https://schema.org',
-		'@type'           => 'ItemList',
-		'itemListElement' => $wp_toc_schema_items,
-	);
-	return '<script type="application/ld+json">' . wp_json_encode( $schema ) . '</script>' . "\n";
-}
-
-add_action( 'wp_footer', 'wp_toc_print_schema' );
-function wp_toc_print_schema() {
-	// Same reasoning as the buffer callback: never let this feature's
-	// failure break the page around it.
-	try {
-		echo wp_toc_schema_string();
-	} catch ( \Throwable $e ) {
-		return;
-	}
-}
-
-/* -------------------------------------------------------------------------
- * CSS (settings-driven, printed once per page) and toggle JS.
- * ---------------------------------------------------------------------- */
-
-function wp_toc_mark_css_needed() {
-	global $wp_toc_css_needed;
-	$wp_toc_css_needed = true;
-}
-
-/**
- * @param array $s Settings.
- * @return string
- */
-function wp_toc_css_string( array $s ) {
-	ob_start();
-	?>
-	<style>
-		.wp-toc {
-			background: <?php echo esc_html( $s['color_bg'] ); ?>;
-			color: <?php echo esc_html( $s['color_text'] ); ?>;
-			border: 1px solid <?php echo esc_html( $s['color_border'] ); ?>;
-			padding: 1em 1.5em;
-			box-sizing: border-box;
-			width: 100%;
-			max-width: <?php echo (int) $s['max_width']; ?>px;
-			margin: 0 0 1em 0;
-		}
-		.wp-toc.is-collapsed { width: fit-content; max-width: 100%; }
-		.wp-toc.is-collapsed .wp-toc__header { white-space: nowrap; }
-		.wp-toc--align-left { float: left; margin: 0 1.5em 1em 0; }
-		.wp-toc--align-right { float: right; margin: 0 0 1em 1.5em; }
-		.wp-toc--align-center { margin: 0 auto 1em; }
-		.wp-toc__header { display: flex; align-items: center; justify-content: space-between; gap: 1em; }
-		.wp-toc__label { font-weight: 600; }
-		.wp-toc__toggle { background: none; border: 1px solid currentColor; cursor: pointer; padding: .25em .75em; flex-shrink: 0; }
-		.wp-toc__list, .wp-toc__list ul { list-style: none; margin: 0; padding: 0; }
-		.wp-toc__list { margin-top: .75em; }
-		.wp-toc__list ul {
-			font-size: calc(<?php echo esc_html( $s['scale_ratio'] ); ?> * 1em);
-			margin-left: <?php echo (int) $s['indent_px']; ?>px;
-		}
-		.wp-toc a { color: <?php echo esc_html( $s['color_link'] ); ?>; text-decoration: none; }
-		.wp-toc a:hover { color: <?php echo esc_html( $s['color_link_hover'] ); ?>; text-decoration: underline; }
-	</style>
-	<?php
-	return ob_get_clean();
-}
-
-add_action( 'wp_footer', 'wp_toc_print_css', 5 );
-function wp_toc_print_css() {
-	global $wp_toc_css_needed;
-	if ( empty( $wp_toc_css_needed ) ) {
-		return;
-	}
-	try {
-		echo wp_toc_css_string( wp_toc_get_settings() );
-	} catch ( \Throwable $e ) {
-		return;
-	}
-}
-
-add_action( 'init', 'wp_toc_register_script' );
-function wp_toc_register_script() {
-	wp_register_script( 'wp-toc-block', WP_TOC_URL . 'assets/toc.js', array(), WP_TOC_VERSION, true );
-}
-

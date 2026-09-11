@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- **Rewritten to build the table of contents client-side.** Every server-side
+  approach failed against Divi 5, which assembles its module tree through its
+  own pipeline and never passes the finished HTML back through `the_content`.
+  Hooking `the_content` produced nothing in any Divi module; parsing the whole
+  page in an output buffer instead worked only intermittently and, when it
+  failed (memory exhaustion, which `try`/`catch` cannot catch), returned an
+  empty response — blanking the entire page on any post using the shortcode.
+  That is an unacceptable failure mode for a navigation aid.
+
+  PHP now only emits a mount element carrying the settings; `assets/toc.js`
+  finds the headings in the already-rendered DOM, where how Divi built them no
+  longer matters, and the worst case is no table of contents. Removed the
+  `the_content` filter, the output buffer, the server-side DOM parsing, the
+  anchor-injection regex, and the debug instrumentation that went with them —
+  the plugin is less than half its previous size.
+
+  Trade-off: the list isn't in the server HTML and requires JavaScript.
+- Added a "content container selector" setting (default `.et_pb_post_content`),
+  so the element holding the post content can be corrected without a code
+  change. Guessing it wrongly was the cause of a long debugging detour; the
+  plugin now warns in the browser console when it matches nothing.
+
 - Fixed the actual bug: the guessed content-wrapper class names
   (`et_builder_inner_content`, `entry-content`, `et-l--post`) didn't match
   anything on this site, so the buffer fallback marked all real headings
