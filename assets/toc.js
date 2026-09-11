@@ -194,6 +194,7 @@
 
 			markers +
 			'.wp-toc .wp-toc__list{margin:0;}' +
+			'.wp-toc .wp-toc__list li{line-height:1.3em;margin-bottom:10px;}' +
 			'.wp-toc:not(.is-collapsed) .wp-toc__list{margin-top:.75em;}' +
 			'.wp-toc .wp-toc__list ul,.wp-toc .wp-toc__list ol' +
 			'{font-size:calc(' + s.scale + ' * 1em);margin-left:' + s.indent + 'px !important;}' +

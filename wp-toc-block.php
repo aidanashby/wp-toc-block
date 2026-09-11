@@ -69,10 +69,10 @@ function wp_toc_defaults() {
 		'alignment'       => 'none',
 		'list_type'       => 'none',
 		'nested_list'     => true,
-		'color_bg'        => '#f7f7f7',
+		'color_bg'        => '#eaeaea',
 		'color_text'      => '#1e1e1e',
 		'color_link'      => '#1e1e1e',
-		'color_link_hover' => '#0073aa',
+		'color_link_hover' => '#d72715',
 		'color_border'    => '#dddddd',
 	);
 }
