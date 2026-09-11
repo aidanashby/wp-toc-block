@@ -20,8 +20,11 @@ Built for Divi 5.
   - Heading size scale ratio and per-level indent for nested items
   - Maximum width when expanded (shrinks to fit the label and toggle icon when
     collapsed, if toggle view is on)
-  - Alignment: none, left/right (floats, text wraps around it), or centre
+  - Alignment: none, left, right, or centre
+  - List markers: none, bullets, or numbers
   - Colours for background, text, links, hover, and border
+- With toggle view on, the whole top of the block expands and collapses it, with
+  a rotating chevron and a short animation (respects `prefers-reduced-motion`)
 - Adds anchor IDs to headings that don't already have one, without colliding with
   IDs already used on the page
 - Outputs `ItemList` schema.org JSON-LD for the generated list

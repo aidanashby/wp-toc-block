@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Fixed: left and right alignment stopped the block expanding. Cause was
+  `float` — Divi 5 modules are flex containers, and flex items don't wrap
+  around floats, so the floated block overlapped the next module and was
+  painted over by it. Alignment is now margin-based, which has no
+  containment or stacking problems. Text no longer flows *around* the
+  block, which never actually worked between sibling Divi modules anyway.
+- The whole top of the block is now the toggle, not just a small button,
+  and it's a real `<button>` element so it stays keyboard-operable and
+  properly announced (a clickable `<div>` would be neither).
+- Replaced the "Toggle" text with a chevron icon that rotates on open.
+- Expand/collapse now animates (220ms), using a `0fr`/`1fr` grid row track
+  since `height:auto` can't be transitioned. Honours
+  `prefers-reduced-motion`.
+- Added a "list markers" setting: none, bullets, or numbers (numbers render
+  as `<ol>`).
+
 - **Rewritten to build the table of contents client-side.** Every server-side
   approach failed against Divi 5, which assembles its module tree through its
   own pipeline and never passes the finished HTML back through `the_content`.

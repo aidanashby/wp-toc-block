@@ -10,11 +10,35 @@
 ( function () {
 	'use strict';
 
+	var SVG_NS = 'http://www.w3.org/2000/svg';
+
+	/** Chevron, built with DOM methods rather than an HTML string. */
+	function chevron() {
+		var svg = document.createElementNS( SVG_NS, 'svg' );
+		svg.setAttribute( 'class', 'wp-toc__icon' );
+		svg.setAttribute( 'width', '16' );
+		svg.setAttribute( 'height', '16' );
+		svg.setAttribute( 'viewBox', '0 0 16 16' );
+		svg.setAttribute( 'aria-hidden', 'true' );
+		svg.setAttribute( 'focusable', 'false' );
+
+		var path = document.createElementNS( SVG_NS, 'path' );
+		path.setAttribute( 'd', 'M4 6l4 4 4-4' );
+		path.setAttribute( 'fill', 'none' );
+		path.setAttribute( 'stroke', 'currentColor' );
+		path.setAttribute( 'stroke-width', '2' );
+		path.setAttribute( 'stroke-linecap', 'round' );
+		path.setAttribute( 'stroke-linejoin', 'round' );
+
+		svg.appendChild( path );
+		return svg;
+	}
+
 	/** Mirrors WordPress's sanitize_title() closely enough for anchors. */
 	function slugify( text ) {
 		return text
 			.toLowerCase()
-			.replace( /[ \s]+/g, '-' )
+			.replace( /[ \s]+/g, '-' )
 			.replace( /[^a-z0-9\-_]/g, '' )
 			.replace( /-{2,}/g, '-' )
 			.replace( /^-+|-+$/g, '' );
@@ -67,8 +91,8 @@
 	}
 
 	/** Built with createElement/textContent, so heading text can't inject markup. */
-	function renderList( nodes ) {
-		var ul = document.createElement( 'ul' );
+	function renderList( nodes, listType ) {
+		var list = document.createElement( 'number' === listType ? 'ol' : 'ul' );
 
 		nodes.forEach( function ( node ) {
 			var li = document.createElement( 'li' );
@@ -79,13 +103,13 @@
 			li.appendChild( a );
 
 			if ( node.children.length ) {
-				li.appendChild( renderList( node.children ) );
+				li.appendChild( renderList( node.children, listType ) );
 			}
 
-			ul.appendChild( li );
+			list.appendChild( li );
 		} );
 
-		return ul;
+		return list;
 	}
 
 	function injectCss( s ) {
@@ -93,13 +117,26 @@
 			return;
 		}
 
+		// Margin-based alignment, not float: Divi 5 modules are flex
+		// containers, and flex items don't wrap around floats — a floated
+		// block just overlapped the next module and got painted over, so
+		// expanding it appeared to do nothing.
 		var align = '';
 		if ( 'left' === s.align ) {
-			align = '.wp-toc{float:left;margin:0 1.5em 1em 0;}';
+			align = '.wp-toc--align-left{margin:0 auto 1em 0;}';
 		} else if ( 'right' === s.align ) {
-			align = '.wp-toc{float:right;margin:0 0 1em 1.5em;}';
+			align = '.wp-toc--align-right{margin:0 0 1em auto;}';
 		} else if ( 'center' === s.align ) {
-			align = '.wp-toc{margin:0 auto 1em;}';
+			align = '.wp-toc--align-center{margin:0 auto 1em;}';
+		}
+
+		var markers = '';
+		if ( 'bullet' === s.listType ) {
+			markers = '.wp-toc__list,.wp-toc__list ul{list-style:disc;padding-left:1.25em;}';
+		} else if ( 'number' === s.listType ) {
+			markers = '.wp-toc__list,.wp-toc__list ol{list-style:decimal;padding-left:1.5em;}';
+		} else {
+			markers = '.wp-toc__list,.wp-toc__list ul,.wp-toc__list ol{list-style:none;padding:0;}';
 		}
 
 		var css =
@@ -107,18 +144,36 @@
 			';border:1px solid ' + s.colors.border +
 			';padding:1em 1.5em;box-sizing:border-box;width:100%;max-width:' + s.maxWidth + 'px;margin:0 0 1em 0;}' +
 			align +
-			// Collapsed: shrink to fit the label and toggle rather than sitting
-			// at full width with nothing to show for it.
+			// Collapsed: shrink to fit the header rather than sitting at full
+			// width with nothing to show for it.
 			'.wp-toc.is-collapsed{width:fit-content;max-width:100%;}' +
 			'.wp-toc.is-collapsed .wp-toc__header{white-space:nowrap;}' +
-			'.wp-toc__header{display:flex;align-items:center;justify-content:space-between;gap:1em;}' +
+
+			// The header is a real <button> when toggling is on, so the whole
+			// top of the block is clickable and keyboard-operable. Strip the
+			// button chrome so it still looks like a heading row.
+			'.wp-toc__header{display:flex;align-items:center;justify-content:space-between;' +
+			'gap:1em;width:100%;margin:0;padding:0;background:none;border:0;color:inherit;' +
+			'font:inherit;text-align:left;}' +
+			'button.wp-toc__header{cursor:pointer;}' +
 			'.wp-toc__label{font-weight:600;}' +
-			'.wp-toc__toggle{background:none;border:1px solid currentColor;cursor:pointer;padding:.25em .75em;flex-shrink:0;}' +
-			'.wp-toc__list,.wp-toc__list ul{list-style:none;margin:0;padding:0;}' +
-			'.wp-toc__list{margin-top:.75em;}' +
-			'.wp-toc__list ul{font-size:calc(' + s.scale + ' * 1em);margin-left:' + s.indent + 'px;}' +
+			'.wp-toc__icon{flex-shrink:0;transition:transform 200ms ease;}' +
+			'.wp-toc:not(.is-collapsed) .wp-toc__icon{transform:rotate(180deg);}' +
+
+			// Animating to height:auto isn't possible, but a grid row track
+			// from 0fr to 1fr is, and it handles any content height.
+			'.wp-toc__panel{display:grid;grid-template-rows:0fr;visibility:hidden;' +
+			'transition:grid-template-rows 220ms ease,visibility 220ms;}' +
+			'.wp-toc:not(.is-collapsed) .wp-toc__panel{grid-template-rows:1fr;visibility:visible;}' +
+			'.wp-toc__panel>*{overflow:hidden;min-height:0;}' +
+
+			markers +
+			'.wp-toc__list{margin:0;}' +
+			'.wp-toc:not(.is-collapsed) .wp-toc__list{margin-top:.75em;}' +
+			'.wp-toc__list ul,.wp-toc__list ol{font-size:calc(' + s.scale + ' * 1em);margin-left:' + s.indent + 'px;}' +
 			'.wp-toc a{color:' + s.colors.link + ';text-decoration:none;}' +
-			'.wp-toc a:hover{color:' + s.colors.linkHover + ';text-decoration:underline;}';
+			'.wp-toc a:hover{color:' + s.colors.linkHover + ';text-decoration:underline;}' +
+			'@media (prefers-reduced-motion:reduce){.wp-toc__panel,.wp-toc__icon{transition:none;}}';
 
 		var style = document.createElement( 'style' );
 		style.id = 'wp-toc-style';
@@ -155,15 +210,27 @@
 
 	function buildToc( tree, s, instance ) {
 		var nav = document.createElement( 'nav' );
-		var listId = 'wp-toc-list-' + instance;
+		var panelId = 'wp-toc-panel-' + instance;
 		var collapsed = s.toggle && s.startHidden;
 
 		nav.className = 'wp-toc wp-toc--align-' + s.align + ( collapsed ? ' is-collapsed' : '' );
 		nav.setAttribute( 'aria-label', 'Table of contents' );
 
 		if ( s.showLabel || s.toggle ) {
-			var header = document.createElement( 'div' );
+			// A <button> rather than a <div> when toggling: the whole top row
+			// becomes the click target while staying keyboard-operable and
+			// announced properly, which a clickable div would not be.
+			var header = document.createElement( s.toggle ? 'button' : 'div' );
 			header.className = 'wp-toc__header';
+
+			if ( s.toggle ) {
+				header.type = 'button';
+				header.setAttribute( 'aria-expanded', collapsed ? 'false' : 'true' );
+				header.setAttribute( 'aria-controls', panelId );
+				if ( ! s.showLabel ) {
+					header.setAttribute( 'aria-label', 'Table of contents' );
+				}
+			}
 
 			if ( s.showLabel ) {
 				var label = document.createElement( 'span' );
@@ -173,29 +240,26 @@
 			}
 
 			if ( s.toggle ) {
-				var button = document.createElement( 'button' );
-				button.type = 'button';
-				button.className = 'wp-toc__toggle';
-				button.setAttribute( 'aria-expanded', collapsed ? 'false' : 'true' );
-				button.setAttribute( 'aria-controls', listId );
-				button.textContent = 'Toggle';
-				button.addEventListener( 'click', function () {
-					var expanded = 'true' === button.getAttribute( 'aria-expanded' );
-					button.setAttribute( 'aria-expanded', String( ! expanded ) );
-					list.hidden = expanded;
+				header.appendChild( chevron() );
+				header.addEventListener( 'click', function () {
+					var expanded = 'true' === header.getAttribute( 'aria-expanded' );
+					header.setAttribute( 'aria-expanded', String( ! expanded ) );
 					nav.classList.toggle( 'is-collapsed', expanded );
 				} );
-				header.appendChild( button );
 			}
 
 			nav.appendChild( header );
 		}
 
-		var list = renderList( tree );
+		// The panel is the animated wrapper; the list sits inside it.
+		var panel = document.createElement( 'div' );
+		panel.className = 'wp-toc__panel';
+		panel.id = panelId;
+
+		var list = renderList( tree, s.listType );
 		list.className = 'wp-toc__list';
-		list.id = listId;
-		list.hidden = collapsed;
-		nav.appendChild( list );
+		panel.appendChild( list );
+		nav.appendChild( panel );
 
 		return nav;
 	}

@@ -67,6 +67,7 @@ function wp_toc_defaults() {
 		'indent_px'       => 16,
 		'max_width'       => 250,
 		'alignment'       => 'none',
+		'list_type'       => 'none',
 		'color_bg'        => '#f7f7f7',
 		'color_text'      => '#1e1e1e',
 		'color_link'      => '#1e1e1e',
@@ -183,6 +184,12 @@ function wp_toc_sanitize_settings( $input ) {
 		$out['alignment'] = in_array( $input['alignment'], array( 'none', 'left', 'right', 'center' ), true )
 			? $input['alignment']
 			: $defaults['alignment'];
+	}
+
+	if ( isset( $input['list_type'] ) ) {
+		$out['list_type'] = in_array( $input['list_type'], array( 'none', 'bullet', 'number' ), true )
+			? $input['list_type']
+			: $defaults['list_type'];
 	}
 
 	foreach ( array( 'color_bg', 'color_text', 'color_link', 'color_link_hover', 'color_border' ) as $key ) {
@@ -305,14 +312,31 @@ function wp_toc_render_settings_page() {
 						<select name="<?php echo $opt; ?>[alignment]" id="toc-alignment">
 							<?php
 							$alignments = array(
-								'none'   => __( 'None (full width, in the flow of the content)', 'wp-toc-block' ),
-								'left'   => __( 'Left (floats, text wraps around it)', 'wp-toc-block' ),
-								'right'  => __( 'Right (floats, text wraps around it)', 'wp-toc-block' ),
+								'none'   => __( 'None (full width, up to the maximum)', 'wp-toc-block' ),
+								'left'   => __( 'Left', 'wp-toc-block' ),
+								'right'  => __( 'Right', 'wp-toc-block' ),
 								'center' => __( 'Centre', 'wp-toc-block' ),
 							);
 							foreach ( $alignments as $value => $label ) :
 								?>
 								<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $s['alignment'], $value ); ?>><?php echo esc_html( $label ); ?></option>
+							<?php endforeach; ?>
+						</select>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="toc-list-type"><?php esc_html_e( 'List markers', 'wp-toc-block' ); ?></label></th>
+					<td>
+						<select name="<?php echo $opt; ?>[list_type]" id="toc-list-type">
+							<?php
+							$list_types = array(
+								'none'   => __( 'None', 'wp-toc-block' ),
+								'bullet' => __( 'Bullets', 'wp-toc-block' ),
+								'number' => __( 'Numbers', 'wp-toc-block' ),
+							);
+							foreach ( $list_types as $value => $label ) :
+								?>
+								<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $s['list_type'], $value ); ?>><?php echo esc_html( $label ); ?></option>
 							<?php endforeach; ?>
 						</select>
 					</td>
@@ -377,6 +401,7 @@ function wp_toc_shortcode( $atts ) {
 		'indent'      => (int) $s['indent_px'],
 		'maxWidth'    => (int) $s['max_width'],
 		'align'       => $s['alignment'],
+		'listType'    => $s['list_type'],
 		'colors'      => array(
 			'bg'        => $s['color_bg'],
 			'text'      => $s['color_text'],
