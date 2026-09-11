@@ -23,7 +23,8 @@ Built for Divi 5.
     when collapsed, if toggle view is on)
   - Alignment: left, right, or centre
   - Float — whether content flows around the block or it sits on its own line
-    above what follows (left/right only; centre never floats)
+    above what follows (left/right only; centre never floats, and nothing floats
+    on screens 767px and narrower)
   - List markers: none, bullets, or numbers
   - Scroll offset in px, so a clicked link doesn't land the heading underneath a
     fixed header bar

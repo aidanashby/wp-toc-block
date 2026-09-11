@@ -20,7 +20,8 @@ Initial release. Built for Divi 5.
   - Heading size scale ratio, per-level indent, line height, and space between
     items.
   - Maximum width, alignment (left/right/centre), and whether the block floats so
-    content flows around it.
+    content flows around it. Nothing floats on screens 767px and narrower, where
+    there isn't the width for content to sit alongside it.
   - List markers: none, bullets or numbers.
   - Scroll offset, to stop a clicked link landing the heading underneath a fixed
     header bar.

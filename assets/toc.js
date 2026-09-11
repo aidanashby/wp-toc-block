@@ -213,7 +213,12 @@
 			'{font-size:calc(' + s.scale + ' * 1em);margin-left:' + s.indent + 'em !important;}' +
 			'.wp-toc a{color:' + s.colors.link + ';text-decoration:none;}' +
 			'.wp-toc a:hover{color:' + s.colors.linkHover + ';text-decoration:underline;}' +
-			'@media (prefers-reduced-motion:reduce){.wp-toc,.wp-toc__panel,.wp-toc__icon{transition:none;}}';
+			'@media (prefers-reduced-motion:reduce){.wp-toc,.wp-toc__panel,.wp-toc__icon{transition:none;}}' +
+			// Never float on mobile — there isn't the width for content to
+			// wrap alongside it. Two classes so this beats the alignment
+			// rules above, which have equal specificity on their own.
+			'@media (max-width:767px){.wp-toc.wp-toc--align-left,.wp-toc.wp-toc--align-right' +
+			'{float:none;margin:0 0 1em 0;}}';
 
 		var style = document.createElement( 'style' );
 		style.id = 'wp-toc-style';

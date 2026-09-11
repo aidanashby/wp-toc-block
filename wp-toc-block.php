@@ -243,6 +243,10 @@ function wp_toc_admin_assets( $hook ) {
 			'var a=$("#toc-alignment"),r=$(".toc-float-row");' .
 			'function t(){r.toggle("left"===a.val()||"right"===a.val());}' .
 			't();a.on("change",t);' .
+			// Initial state only means anything when there is a toggle.
+			'var v=$("#toc-toggle-view"),i=$(".toc-initial-state-row");' .
+			'function g(){i.toggle(v.is(":checked"));}' .
+			'g();v.on("change",g);' .
 		'});'
 	);
 }
@@ -299,9 +303,9 @@ function wp_toc_render_settings_page() {
 			<table class="form-table" role="presentation">
 				<tr>
 					<th scope="row"><?php esc_html_e( 'Toggle view', 'wp-toc-block' ); ?></th>
-					<td><label><input type="checkbox" name="<?php echo $opt; ?>[toggle_view]" value="1" <?php checked( $s['toggle_view'] ); ?>> <?php esc_html_e( 'Let visitors show/hide the table of contents', 'wp-toc-block' ); ?></label></td>
+					<td><label><input type="checkbox" name="<?php echo $opt; ?>[toggle_view]" id="toc-toggle-view" value="1" <?php checked( $s['toggle_view'] ); ?>> <?php esc_html_e( 'Let visitors show/hide the table of contents', 'wp-toc-block' ); ?></label></td>
 				</tr>
-				<tr>
+				<tr class="toc-initial-state-row">
 					<th scope="row"><?php esc_html_e( 'Initial state', 'wp-toc-block' ); ?></th>
 					<td><label><input type="checkbox" name="<?php echo $opt; ?>[initially_hidden]" value="1" <?php checked( $s['initially_hidden'] ); ?>> <?php esc_html_e( 'Start hidden', 'wp-toc-block' ); ?></label></td>
 				</tr>
