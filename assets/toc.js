@@ -136,17 +136,20 @@
 		// `.wp-toc__list` (0,1,0) — that reset was silently removing the
 		// nested indent and the padding the markers sit in, so nesting
 		// vanished and bullets were clipped outside the box.
+		// Padding is set on all four sides, not just the left: Divi's own list
+		// styles put vertical padding on ul/ol, which survived as residual
+		// height when the panel was collapsed.
 		var markers = '';
 		if ( 'bullet' === s.listType ) {
 			markers =
-				'.wp-toc .wp-toc__list,.wp-toc .wp-toc__list ul{list-style:disc !important;padding-left:1.4em !important;}';
+				'.wp-toc .wp-toc__list,.wp-toc .wp-toc__list ul{list-style:disc !important;padding:0 0 0 1.4em !important;}';
 		} else if ( 'number' === s.listType ) {
 			markers =
-				'.wp-toc .wp-toc__list,.wp-toc .wp-toc__list ol{list-style:decimal !important;padding-left:1.6em !important;}';
+				'.wp-toc .wp-toc__list,.wp-toc .wp-toc__list ol{list-style:decimal !important;padding:0 0 0 1.6em !important;}';
 		} else {
 			markers =
 				'.wp-toc .wp-toc__list,.wp-toc .wp-toc__list ul,.wp-toc .wp-toc__list ol' +
-				'{list-style:none !important;padding-left:0 !important;}';
+				'{list-style:none !important;padding:0 !important;}';
 		}
 
 		var css =
@@ -163,7 +166,9 @@
 			// fit-content while the list is merely collapsed measures the whole
 			// list and produces a box far wider than the configured maximum.
 			'.wp-toc.is-shrunk{width:fit-content;max-width:100%;}' +
-			'.wp-toc.is-shrunk .wp-toc__panel{width:0;}' +
+			// Fully out of the layout once closed, so no residual height from
+			// the theme's own list padding can pad the block out.
+			'.wp-toc.is-shrunk .wp-toc__panel{display:none;}' +
 			'.wp-toc.is-shrunk .wp-toc__header{white-space:nowrap;}' +
 
 			// The header is a real <button> when toggling is on, so the whole
@@ -173,7 +178,7 @@
 			'gap:1em;width:100%;margin:0;padding:0;background:none;border:0;color:inherit;' +
 			'font:inherit;text-align:left;}' +
 			'button.wp-toc__header{cursor:pointer;}' +
-			'.wp-toc__label{font-weight:600;}' +
+			'.wp-toc__label{font-weight:700;}' +
 			'.wp-toc__icon{flex-shrink:0;transition:transform 200ms ease;}' +
 			'.wp-toc:not(.is-collapsed) .wp-toc__icon{transform:rotate(180deg);}' +
 
@@ -263,21 +268,28 @@
 				header.addEventListener( 'click', function () {
 					var expanded = 'true' === header.getAttribute( 'aria-expanded' );
 					header.setAttribute( 'aria-expanded', String( ! expanded ) );
-					nav.classList.toggle( 'is-collapsed', expanded );
 
 					if ( expanded ) {
-						// Closing: shrink the box only once the list has
-						// finished sliding shut, or it would snap away
-						// sideways instead of animating.
+						// Closing: animate shut first, then take the panel out
+						// of the layout — doing it immediately would make the
+						// list vanish instead of sliding away.
+						nav.classList.add( 'is-collapsed' );
 						window.setTimeout( function () {
 							if ( nav.classList.contains( 'is-collapsed' ) ) {
 								nav.classList.add( 'is-shrunk' );
 							}
 						}, 230 );
 					} else {
-						// Opening: give the list its width back immediately so
-						// it has somewhere to animate into.
+						// Opening: put the panel back in the layout first. A
+						// transition can't run from display:none, so the class
+						// that starts the animation has to wait for a frame in
+						// which the panel is already displayed.
 						nav.classList.remove( 'is-shrunk' );
+						window.requestAnimationFrame( function () {
+							window.requestAnimationFrame( function () {
+								nav.classList.remove( 'is-collapsed' );
+							} );
+						} );
 					}
 				} );
 			}
