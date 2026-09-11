@@ -340,7 +340,11 @@ function wp_toc_render_settings_page() {
 
 add_shortcode( 'toc', 'wp_toc_shortcode' );
 function wp_toc_shortcode( $atts ) {
-	return WP_TOC_PLACEHOLDER;
+	// DEBUG: a plain visible marker (not a comment, so it survives even if
+	// something strips HTML comments) that always renders regardless of
+	// settings — confirms the shortcode callback itself actually ran.
+	// Remove once the Divi rendering issue is diagnosed.
+	return '[wp-toc-block: shortcode ran]' . WP_TOC_PLACEHOLDER;
 }
 
 /* -------------------------------------------------------------------------
@@ -584,13 +588,35 @@ function wp_toc_node_is_within( DOMNode $ancestor, DOMNode $node ) {
 }
 
 /**
+ * DEBUG: append a console.log of diagnostic data to $html, right before
+ * </body> if present, else at the end. Remove this whole function (and
+ * its call sites) once the Divi rendering issue is diagnosed.
+ *
+ * @param string $html
+ * @param array  $data
+ * @return string
+ */
+function wp_toc_append_debug( $html, array $data ) {
+	$script = '<script>console.log("[wp-toc-block]", ' . wp_json_encode( $data ) . ');</script>';
+	return ( false !== strpos( $html, '</body>' ) )
+		? str_replace( '</body>', $script . '</body>', $html )
+		: $html . $script;
+}
+
+/**
  * @param string $buffer
  * @return string
  */
 function wp_toc_process_buffer( $buffer ) {
+	// DEBUG: dump what this pass actually found into the browser console —
+	// remove once the Divi rendering issue is diagnosed.
+	$debug = array( 'stage' => 'buffer', 'post_id' => get_queried_object_id() );
+
 	if ( false === strpos( $buffer, WP_TOC_PLACEHOLDER ) ) {
-		return $buffer;
+		$debug['placeholder_found_in_buffer'] = false;
+		return wp_toc_append_debug( $buffer, $debug );
 	}
+	$debug['placeholder_found_in_buffer'] = true;
 
 	$settings = wp_toc_get_settings();
 	$levels   = $settings['heading_levels'];
@@ -598,6 +624,11 @@ function wp_toc_process_buffer( $buffer ) {
 	$dom        = null;
 	$flat_all   = wp_toc_scan_headings( $buffer, $levels, $dom );
 	$scope_node = wp_toc_find_scope_node( $dom, get_queried_object_id() );
+
+	$debug['heading_levels_setting']  = $levels;
+	$debug['headings_found_total']    = count( $flat_all );
+	$debug['scope_node_found']        = (bool) $scope_node;
+	$debug['scope_node_tag_class']    = $scope_node ? ( $scope_node->nodeName . '.' . $scope_node->getAttribute( 'class' ) ) : null;
 
 	if ( $scope_node ) {
 		foreach ( $flat_all as &$item ) {
@@ -608,11 +639,32 @@ function wp_toc_process_buffer( $buffer ) {
 		unset( $item );
 	}
 
+	$in_scope_count             = count(
+		array_filter(
+			$flat_all,
+			function ( $i ) {
+				return ! $i['skip'];
+			}
+		)
+	);
+	$debug['headings_in_scope_after_skip'] = $in_scope_count;
+	$debug['min_headings_setting']          = $settings['min_headings'];
+
 	// Word count from the scoped content only, if we found it — otherwise
 	// the whole page's nav/footer text would inflate the count.
 	$word_count_source = $scope_node ? $scope_node->textContent : wp_strip_all_tags( $buffer );
+	$debug['min_words_setting'] = $settings['min_words'];
+	$debug['word_count_found']  = str_word_count( $word_count_source );
+
 	if ( $settings['min_words'] > 0 && str_word_count( $word_count_source ) < $settings['min_words'] ) {
-		return str_replace( WP_TOC_PLACEHOLDER, '', $buffer );
+		$debug['verdict'] = 'stripped: below min_words';
+		return wp_toc_append_debug( str_replace( WP_TOC_PLACEHOLDER, '', $buffer ), $debug );
+	}
+
+	if ( $in_scope_count < $settings['min_headings'] ) {
+		$debug['verdict'] = 'stripped: below min_headings (check scope_node_found/tag_class above — a wrong or too-narrow scope match is the likely cause if headings_found_total > 0 but headings_in_scope_after_skip is much lower)';
+	} else {
+		$debug['verdict'] = 'rendered';
 	}
 
 	$result = wp_toc_finish( $buffer, $levels, $flat_all, $settings );
@@ -632,7 +684,7 @@ function wp_toc_process_buffer( $buffer ) {
 			: $result . $extra;
 	}
 
-	return $result;
+	return wp_toc_append_debug( $result, $debug );
 }
 
 /**
