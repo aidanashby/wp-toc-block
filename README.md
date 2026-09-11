@@ -29,11 +29,10 @@ Place `[toc]` anywhere in a post or page's content. It only works inside the mai
 post/page content area — not inside widgets or Divi 5 Theme Builder template parts
 (headers, footers, global templates), since those aren't part of the post content.
 
-In Divi, place it in a **Text** module (or directly in the block/classic editor body) —
-not the **Code** module. The Code module runs shortcodes by calling `do_shortcode()`
-directly on its own saved text, bypassing the standard `the_content` filter chain this
-plugin hooks into, so `[toc]` there produces an unreplaced placeholder comment instead
-of the table of contents.
+Works in any Divi 5 module (Text, Code, etc.) — Divi's builder renders modules through
+its own pipeline rather than WordPress's `the_content` filter, so this plugin also
+scans and replaces via a full-page fallback for that case, scoped to the post's own
+content wrapper.
 
 ## Requirements
 

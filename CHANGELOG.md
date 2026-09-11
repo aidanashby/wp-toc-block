@@ -31,3 +31,14 @@
   hidden) now shrinks to fit just the label and toggle icon rather than
   sitting at the full expanded width; expanded width defaults to 250px via
   the new setting. Alignment adds none/left/right/centre.
+- Found in further live testing: the placeholder stayed unreplaced in a
+  Divi Text module too, not just Code. Root cause confirmed (with an
+  opus-advisor second opinion) — Divi 5 renders its whole module tree
+  through its own pipeline, calling `do_shortcode()` per module field
+  directly; the assembled HTML never passes through `apply_filters(
+  'the_content', ...)`, so nothing hooked there can ever see it, on any
+  module. Added a full-page output-buffer fallback (`template_redirect`
+  + `ob_start`), scoped to the post's own content wrapper (tries
+  `#post-{ID}` first, then a couple of Divi-specific classes) so header/
+  nav/footer/sidebar headings can't leak into the list. The `the_content`
+  filter stays as the fast path for non-builder content.
