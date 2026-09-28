@@ -3,7 +3,7 @@
  * Plugin Name:       WP TOC Block
  * Description:       [toc] shortcode that builds a table of contents from the headings in
  *                     the current post or page. No auto-insert, no block editor block.
- * Version:           0.1.0
+ * Version:           0.1.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Aidan Ashby
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'WP_TOC_VERSION', '0.1.0' );
+define( 'WP_TOC_VERSION', '0.1.1' );
 define( 'WP_TOC_FILE', __FILE__ );
 define( 'WP_TOC_URL', plugin_dir_url( __FILE__ ) );
 define( 'WP_TOC_OPTION', 'wp_toc_settings' );

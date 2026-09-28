@@ -2,6 +2,11 @@
 
 All notable changes to WP TOC Block are documented here.
 
+## 0.1.1
+
+- Plugin icon on the Plugins and Updates screens.
+- Bundled Plugin Update Checker updated from 5.6 to 5.7.
+
 ## 0.1.0
 
 Initial release. Built for Divi 5.
