@@ -2,6 +2,14 @@
 
 All notable changes to WP TOC Block are documented here.
 
+## 0.1.2
+
+- Links are underlined at rest, so they don't rely on colour alone.
+- Visible keyboard focus outline on links and the toggle button.
+- When a page has several tables of contents, each gets a distinct accessible name ("Table of contents 2" and so on).
+- Settings page: a green tick or red cross beside each colour shows whether it has enough contrast against the background, with the ratio on hover.
+- Restores `wp-toc-block.php`, which a sync commit had deleted from the repository.
+
 ## 0.1.1
 
 - Plugin icon on the Plugins and Updates screens.

@@ -21,13 +21,14 @@ Built for Divi 5.
   - Float — whether content flows around the block or it sits on its own line above what follows (left/right only; centre never floats, and nothing floats on screens 767px and narrower)
   - List markers: none, bullets, or numbers
   - Scroll offset in px, so a clicked link doesn't land the heading underneath a fixed header bar
-  - Colours for background, text, links, hover, and border
+  - Colours for background, text, links, hover, and border, each with a green tick or red cross showing whether it has enough contrast against the background (WCAG AA: 4.5:1 for text and links, 3:1 for the border). Hover the mark for the ratio
 
 Text-scale values (indent, line height, item spacing) are in em so they track the surrounding font size. Block and viewport dimensions — maximum width and scroll offset — stay in px.
 - With toggle view on, the whole top of the block expands and collapses it, with a rotating chevron and a short animation (respects `prefers-reduced-motion`)
 - Adds anchor IDs to headings that don't already have one, without colliding with IDs already used on the page
 - The scroll offset is applied as `scroll-margin-top` on the headings rather than by intercepting clicks, so it also covers arriving on a `#hash` link directly and browser back/forward
 - Outputs `ItemList` schema.org JSON-LD for the generated list
+- Accessibility: a labelled `<nav>` landmark (numbered when a page has several), underlined links, and a visible keyboard focus ring
 
 ## Usage
 

@@ -211,8 +211,13 @@
 			'.wp-toc:not(.is-collapsed) .wp-toc__list{margin-top:.75em;}' +
 			'.wp-toc .wp-toc__list ul,.wp-toc .wp-toc__list ol' +
 			'{font-size:calc(' + s.scale + ' * 1em);margin-left:' + s.indent + 'em !important;}' +
-			'.wp-toc a{color:' + s.colors.link + ';text-decoration:none;}' +
-			'.wp-toc a:hover{color:' + s.colors.linkHover + ';text-decoration:underline;}' +
+			// Underlined at rest so links don't depend on colour alone (WCAG 1.4.1).
+			'.wp-toc a{color:' + s.colors.link + ';text-decoration:underline;}' +
+			'.wp-toc a:hover{color:' + s.colors.linkHover + ';}' +
+			// The header button's reset strips its outline along with its chrome,
+			// and themes often suppress link outlines, so state focus explicitly.
+			'.wp-toc a:focus-visible,.wp-toc__header:focus-visible' +
+			'{outline:2px solid ' + s.colors.text + ';outline-offset:2px;}' +
 			'@media (prefers-reduced-motion:reduce){.wp-toc,.wp-toc__panel,.wp-toc__icon{transition:none;}}' +
 			// Never float on mobile — there isn't the width for content to
 			// wrap alongside it. Two classes so this beats the alignment
@@ -301,7 +306,9 @@
 
 		nav.className =
 			'wp-toc wp-toc--align-' + s.align + ( collapsed ? ' is-collapsed is-shrunk' : '' );
-		nav.setAttribute( 'aria-label', 'Table of contents' );
+		// Landmarks of the same type need distinct names when there are several.
+		var navLabel = 'Table of contents' + ( instance > 1 ? ' ' + instance : '' );
+		nav.setAttribute( 'aria-label', navLabel );
 
 		if ( s.showLabel || s.toggle ) {
 			// A <button> rather than a <div> when toggling: the whole top row
@@ -315,7 +322,7 @@
 				header.setAttribute( 'aria-expanded', collapsed ? 'false' : 'true' );
 				header.setAttribute( 'aria-controls', panelId );
 				if ( ! s.showLabel ) {
-					header.setAttribute( 'aria-label', 'Table of contents' );
+					header.setAttribute( 'aria-label', navLabel );
 				}
 			}
 
