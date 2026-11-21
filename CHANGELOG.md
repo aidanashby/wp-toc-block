@@ -2,6 +2,11 @@
 
 All notable changes to WP TOC Block are documented here.
 
+## 0.1.3
+
+- A content container selector that is not valid CSS (a typo such as `div[`) no longer stops the table of contents appearing. It falls back to the surrounding article, as an unmatched selector does, and the browser console says the selector is not valid.
+- The release zip no longer includes `wp-plugin-check.md`, a development file.
+
 ## 0.1.2
 
 - Links are underlined at rest, so they don't rely on colour alone.

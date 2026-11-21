@@ -8,3 +8,4 @@
 /.planning export-ignore
 /assets/icon-white.svg export-ignore
 /test-toc.mjs export-ignore
+/wp-plugin-check.md export-ignore

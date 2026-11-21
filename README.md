@@ -34,7 +34,7 @@ Text-scale values (indent, line height, item spacing) are in em so they track th
 
 Place `[toc]` anywhere in a post or page's content — any Divi module (Text, Code, etc.) works.
 
-If the table of contents doesn't appear, check the browser console: the plugin warns there when the **content container selector** doesn't match anything on the page.
+If the table of contents doesn't appear, check the browser console: the plugin warns there when the **content container selector** doesn't match anything on the page, or isn't a valid CSS selector.
 Set it under Settings → WP TOC Block to whatever wraps your post content (the default, `.et_pb_post_content`, matches Divi 5's Post Content module).
 
 ## How it works, and why

@@ -405,13 +405,23 @@
 			return;
 		}
 
-		var scope = s.scope ? document.querySelector( s.scope ) : null;
+		// A saved selector that is not valid CSS (a typo such as "div[") makes querySelector throw,
+		// which would stop the list rendering at all; treat it like a selector that matches nothing.
+		var scope = null;
+		var invalid = false;
+		if ( s.scope ) {
+			try {
+				scope = document.querySelector( s.scope );
+			} catch ( e ) {
+				invalid = true;
+			}
+		}
 		if ( ! scope ) {
 			scope = mounts[ 0 ].closest( 'article' ) || document.body;
 			if ( window.console && console.warn ) {
 				console.warn(
-					'[wp-toc-block] No element matched "' + s.scope +
-					'". Falling back to ' + scope.nodeName.toLowerCase() +
+					'[wp-toc-block] ' + ( invalid ? '"' + s.scope + '" is not a valid CSS selector' : 'No element matched "' + s.scope + '"' ) +
+					'. Falling back to ' + scope.nodeName.toLowerCase() +
 					' — set the content container selector in Settings → WP TOC Block.'
 				);
 			}
